@@ -1,5 +1,7 @@
 func factorial(n):
   if n < 2:
     1
-  factorial n
-printf("%d", factorial 10)
+  else:
+    n * factorial (n - 1)
+
+printf("factorial %d = %d", 10, 20)

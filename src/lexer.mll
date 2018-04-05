@@ -1,4 +1,5 @@
 {
+open Lexing
 
 type lexContext = {
   mutable indents: int list;
@@ -15,6 +16,7 @@ rule coral_token ctx = parse
   | '"' { [string_token (Buffer.create 1024) lexbuf] }
   | '(' { [Grammar.LPAREN] }
   | ')' { [Grammar.RPAREN] }
+  | ',' { [Grammar.COMMA] }
   | ':' { [Grammar.COLON] }
   | '\n' [' ']* as tok {
      let indent_len = String.length tok - 1 in

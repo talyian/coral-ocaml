@@ -1,18 +1,19 @@
 open Printf
 open Lexing
-
+open Ast
 open Lexer
 open Grammar
+
+open LlvmBackend
 
 let rec expand_tokens ctx lexbuf =
   match ctx.tokenqueue with
   | [] -> ctx.tokenqueue <- Lexer.coral_token ctx lexbuf; expand_tokens ctx lexbuf
   | tok :: xs -> ctx.tokenqueue <- xs; tok
 
-
 let tokens lexbuf =
   let rec loop ctx =
-    print_string "\n";
+    printf "\n %2d:%-2d " lexbuf.lex_start_p.pos_lnum lexbuf.lex_start_p.pos_bol;
     match expand_tokens ctx lexbuf with
       | INTEGER (n) -> print_int n; loop ctx
       | OPERATOR (n) -> print_string n; loop ctx
@@ -31,12 +32,20 @@ let tokens lexbuf =
       | DEDENT -> printf "DEDENT"; loop ctx
       | LPAREN -> printf "LPAREN ("; loop ctx
       | RPAREN -> printf "RPAREN )"; loop ctx
+      | COMMA -> printf "COMMA"; loop ctx
       | _ -> printf "unhandled token `%s`" (Lexing.lexeme lexbuf)
   in loop {tokenqueue=[]; indents=[0]}
 
 let parse lexbuf =
   try
-    Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf
+    let m = Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf in
+    m
+    |> (fun m -> Ast.show m; m)
+    |> Init_func.run
+    |> Name_resolver.run
+    |> LlvmBackend.run
+    |> ignore;
+    0;
   with exc ->
     printf "\027[1;31mError (%s)\027[0m\n" (Lexing.lexeme lexbuf);
     let pos = lexbuf.lex_start_p in
