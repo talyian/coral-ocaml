@@ -1,0 +1,11 @@
+# here a + b is typed as int
+func returnsInt():
+  let a = 1
+  let b = 2
+  a + b
+
+# How do we decide whether takesInt is "int->int" or "T -> U: where `+`(T, int, U)" ?
+# Maybe for non-generic functions, monomorphize when possible?
+# Definitely do not monomorphise when multiple candidate are available:
+# i.e. a + b does not monomorphize to int->int like Haskell
+func takesInt(n): n + 1

@@ -36,6 +36,7 @@ let rec run1 scope = function
      ignore (run1 scope rhs);
      scope, x
   | IntLiteral i as x -> scope, x
+  | FloatLiteral i as x -> scope, x
   | StringLiteral s as x -> scope, x
   | Comment c as x -> scope, x
   | Var v as x ->
@@ -53,6 +54,11 @@ let rec run1 scope = function
      let final_scope = List.fold_left (fun s p -> fst (run1 s p)) scope lines in
      ignore final_scope;
      scope, x
+  | Tuple t as x ->
+     let scope = List.fold_left (fun s p -> fst (run1 s p)) scope t in
+     scope, x
+  | Return v as x-> ignore (run1 scope v); scope, x
+  | Empty as x -> scope, x
   | x ->
      Printf.printf "Warning: Unhandled node for name resolver\n";
      Ast.show x;

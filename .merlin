@@ -1,2 +1,4 @@
+PRJ coral
 S src
 B _build/src
+PKG llvm

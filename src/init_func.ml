@@ -15,9 +15,11 @@ let run = function
        match lines with
        | [] ->
           let main = match main with
-           | None -> Ast.Func(".init", Free, [], Ast.Block move_lines)
-           | Some f -> f
-          in Module(leave_lines @ [main])
+            | None ->
+               let body = Ast.Block (List.rev (Return (Tuple []) :: move_lines)) in
+               Ast.Func(".init", Type("Void"), [], body)
+            | Some f -> f
+          in Module(main :: leave_lines |> List.rev)
        | line :: xs ->
           match moduleExprAction line with
           | Noop -> loop_line main (line::leave_lines) move_lines xs

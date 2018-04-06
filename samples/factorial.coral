@@ -1,7 +1,10 @@
-func factorial(n):
-  if n < 2:
-    1
-  else:
-    n * factorial (n - 1)
+func printf : Void (p:Ptr, ...)
 
-printf("factorial %d = %d", 10, 20)
+func factorial:Int64 (n:Int64):
+  if n < 2:
+    return 1
+  else:
+    return n * factorial(n - 1)
+
+printf("%ld! = %ld\n", 6, factorial 6)
+printf("%ld != %ld\n", 10, factorial 10)

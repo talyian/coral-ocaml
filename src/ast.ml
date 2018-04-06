@@ -1,8 +1,8 @@
 type coraltype =
   | Free
-  | Simple
-  | Parameterized
-  | Dotted
+  | Type of string
+  | Parameterized of (string * string list)
+  | Dotted of coraltype list
 
 type varNode = {name:string; mutable target: node option}
 and defNode = {name:string; defType:coraltype option}
@@ -13,13 +13,32 @@ and node =
   | Binop of (string * node * node)
   | If of (node * node * node)
   | IntLiteral of string
+  | FloatLiteral of string
   | StringLiteral of string
   | Var of varNode
   | Def of defNode
   | Block of node list
   | Call of node * node list
   | Tuple of (node list)
+  | Return of node
   | Empty
+
+let nodeName = function
+  | Module _ -> "Module"
+  | Func _ -> "Func"
+  | Comment _ -> "Comment"
+  | If _ -> "If"
+  | IntLiteral _ -> "IntLiteral"
+  | FloatLiteral _ -> "FloatLiteral"
+  | StringLiteral _ -> "StringLiteral"
+  | Var _ -> "Var"
+  | Def _ -> "Def"
+  | Block _ -> "Block"
+  | Call _ -> "Call"
+  | Tuple _ -> "Tuple"
+  | Return _ -> "Return"
+  | Empty -> "Empty"
+  | Binop _ -> "Binop"
 
 open Printf
 
@@ -50,7 +69,10 @@ let rec show1 indent (is_inline:bool) node =
      printf "func %s(" name;
      let rec loop = function
        | [] -> ()
-       | p :: xs -> show1 0 true (Def p); loop xs
+       | p :: xs ->
+          show1 0 true (Def p);
+          match xs with | [] -> () | _ -> printf ", ";
+          loop xs
      in loop params;
      printf "):\n";
      show1 (indent + 1) is_inline body
@@ -61,8 +83,11 @@ let rec show1 indent (is_inline:bool) node =
        List.iter (show1 indent is_inline) lines
     | Def x -> printf "%s" x.name
     | Var s -> printf "%s" s.name
-    | StringLiteral s -> printf "\"%s\"" s
+    | StringLiteral s ->
+       let r = Str.regexp "\n" in
+       printf "\"%s\"" (Str.global_replace r "\\n" s)
     | IntLiteral n -> printf "%s" n
+    | FloatLiteral n -> printf "%s" n
     | Comment c -> printf "# %s" c
     | Binop(op, lhs, rhs) ->
        show1 0 true lhs;
@@ -84,7 +109,15 @@ let rec show1 indent (is_inline:bool) node =
           done;
           printf ")"
        )
-    | _ -> printf "AST Node\n"
+    | Return v ->
+       printf "return ";
+       show1 0 true v
+    | Tuple l ->
+       printf "Tuple()";
+    | Func _ -> printf "func";
+    | If _ -> printf "func";
+    | Block _ -> printf "func";
+    | Empty -> printf "empty";
     );
     if not is_inline then printf "\n"
 
