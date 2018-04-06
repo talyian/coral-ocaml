@@ -5,10 +5,11 @@ open Ast
 %token <string> INTEGER
 %token <string> FLOAT
 %token <string> OPERATOR IDENTIFIER STRING
-%token <char> OTHER
-%token FUNC IF ELSE COMMA ELLIPSIS RETURN
-%token LPAREN RPAREN COLON INDENT DEDENT
 %token <int> NEWLINE
+%token <char> OTHER
+%token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
+%token LPAREN RPAREN COLON INDENT DEDENT
+%token EQ
 (*
 %left PLUS MINUS
 %left TIMES DIV
@@ -34,6 +35,8 @@ line
     { Func(name, ret, p, body) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE
     { Func(name, ret, p, Empty) }
+  | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None}, e) }
+  | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None}, e) }
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
 
@@ -72,6 +75,9 @@ param
   | e=IDENTIFIER COLON t=typedef { {name=e; defType=Some t} }
   | ELLIPSIS { {name="..."; defType=Some (Type "...") } }
 paramlist
+  : e=non_empty_paramlist { e }
+  | { [] }
+non_empty_paramlist
   : p=param { [p] }
   | x=paramlist COMMA p=param { x@[p] }
 

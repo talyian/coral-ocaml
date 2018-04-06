@@ -11,8 +11,11 @@ rule coral_token ctx = parse
   | ' ' { coral_token ctx lexbuf }
   | "func" { [Grammar.FUNC] }
   | "if" { [Grammar.IF] }
+  | "let" { [Grammar.LET] }
+  | "set" { [Grammar.SET] }
   | "else" { [Grammar.ELSE] }
   | "return" { [Grammar.RETURN] }
+  | "=" { [Grammar.EQ] }
   | '-'? ['0'-'9']+ as tok { [Grammar.INTEGER(tok)] }
   | '-'? ['0'-'9']+ '.' ['0'-'9']+ as tok { [Grammar.FLOAT(tok)] }
   | '"' { [string_token (Buffer.create 1024) lexbuf] }

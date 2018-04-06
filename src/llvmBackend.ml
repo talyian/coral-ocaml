@@ -29,7 +29,22 @@ let rec llvmType context = function
      | "Ptr" -> Llvm.pointer_type (Llvm.i8_type context)
      | _ -> Printf.eprintf "Unknown Type: '%s'\n" s; Llvm.i64_type context
      )
-  | _ -> failwith "unhandled type"
+  | Parameterized(name, params) ->
+     (match name with
+      | "Ptr" -> Llvm.pointer_type (llvmType context (List.hd params))
+      | "Func" ->
+         (match List.rev params with
+          | ret :: rparams ->
+             Llvm.function_type (llvmType context ret)
+               (rparams
+                |> List.rev
+                |> List.map (llvmType context)
+                |> Array.of_list)
+          | [] -> failwith "function: no return type!")
+        | _ -> Printf.eprintf "Unknown Type: '%s'\n" name; Llvm.i64_type context
+     )
+  | _ -> failwith "Unknown type"
+
 let rec run1 llvalues = function
   | Module lines ->
      let lvContext = Llvm.global_context() in

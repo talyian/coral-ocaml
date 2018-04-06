@@ -42,8 +42,12 @@ let rec run1 scope = function
   | Var v as x ->
      (match findName v.name scope with
       | Some(e) -> v.target <- Some(e)
-      | None -> Printf.printf "\027[1;31mmissing reference: %s\027[0m\n" v.name
+      | None ->
+         Printf.printf "\027[1;31mmissing reference: %s\027[0m\n" v.name;
+         failwith ("missing reference " ^ v.name);
      ); scope, x
+  | Let (v, expr) as x -> addName v.name x (fst (run1 scope expr)), x
+  | Set (v, expr) as x -> fst (run1 scope expr), x
   | Def v as x -> addName v.name x scope, x
   | Call (callee, args) as x ->
      ignore (run1 scope callee);

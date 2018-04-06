@@ -6,7 +6,7 @@ _build/src/cutil.o: src/cutil.cc
 
 main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.ml \
  src/return_insert.ml \
- src/name_resolver.ml src/type_resolver.ml src/llvmBackend.ml _build/src/cutil.o
+ src/name_resolver.ml src/type_resolver.ml src/type_graph.ml src/llvmBackend.ml
 	ocamlbuild -use-ocamlfind -use-menhir -I src main.native \
 	-package llvm \
 	-package ctypes \

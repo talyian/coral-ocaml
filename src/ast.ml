@@ -1,7 +1,7 @@
 type coraltype =
   | Free
   | Type of string
-  | Parameterized of (string * string list)
+  | Parameterized of (string * coraltype list)
   | Dotted of coraltype list
 
 type varNode = {name:string; mutable target: node option}
@@ -17,28 +17,15 @@ and node =
   | StringLiteral of string
   | Var of varNode
   | Def of defNode
+  | Let of varNode * node
+  | Set of varNode * node
   | Block of node list
   | Call of node * node list
   | Tuple of (node list)
   | Return of node
   | Empty
 
-let nodeName = function
-  | Module _ -> "Module"
-  | Func _ -> "Func"
-  | Comment _ -> "Comment"
-  | If _ -> "If"
-  | IntLiteral _ -> "IntLiteral"
-  | FloatLiteral _ -> "FloatLiteral"
-  | StringLiteral _ -> "StringLiteral"
-  | Var _ -> "Var"
-  | Def _ -> "Def"
-  | Block _ -> "Block"
-  | Call _ -> "Call"
-  | Tuple _ -> "Tuple"
-  | Return _ -> "Return"
-  | Empty -> "Empty"
-  | Binop _ -> "Binop"
+let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set"
 
 open Printf
 
@@ -112,8 +99,17 @@ let rec show1 indent (is_inline:bool) node =
     | Return v ->
        printf "return ";
        show1 0 true v
-    | Tuple l ->
-       printf "Tuple()";
+    | Let(var, value) ->
+       printf "let ";
+       show1 0 true (Var var);
+       printf " = ";
+       show1 0 true value;
+    | Set(var, value) ->
+       printf "set ";
+       show1 0 true (Var var);
+       printf " = ";
+       show1 0 true value;
+    | Tuple l -> printf "Tuple()";
     | Func _ -> printf "func";
     | If _ -> printf "func";
     | Block _ -> printf "func";

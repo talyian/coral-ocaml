@@ -42,6 +42,7 @@ let parse lexbuf =
   try
     let m = Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf in
     m
+    |> (fun m -> Ast.show m; m)
     |> Return_insert.run
     |> Init_func.run
     |> Name_resolver.run
@@ -52,10 +53,10 @@ let parse lexbuf =
   with exc ->
     printf "\027[1;31mError (%s)\027[0m\n" (Lexing.lexeme lexbuf);
     let pos = lexbuf.lex_start_p in
-    printf "%d(%d:%d)" pos.pos_cnum pos.pos_lnum pos.pos_bol;
+    printf "%d(%d:%d)\n" pos.pos_cnum pos.pos_lnum pos.pos_bol;
     raise exc
 
 let () =
-  let f = open_in "samples/collatz.inferred.coral" in
+  let f = open_in "samples/inference.coral" in
   let lexbuf = Lexing.from_channel f in
   ignore (parse lexbuf)
