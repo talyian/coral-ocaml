@@ -1,3 +1,5 @@
+(* An AST analysis pass that uses the Type_graph engine to infer unknown types,
+   then populates missing type annotations in the AST. *)
 open Ast
 open Type_graph
 
@@ -40,7 +42,8 @@ let rec createGraph (g:graph) = function
   | IntLiteral i as v ->
      let t = Graph.addTerm g ("i" ^ i) v in
      let cons = (Type ("Int64", [])) in
-     Graph.addCons g t cons; Some t
+     Graph.addCons g t cons;
+     Some t
   | StringLiteral i as v ->
      let t = Graph.addTerm g ("s" ^ i) v in
      let cons = (Type ("String", [])) in
@@ -61,17 +64,9 @@ let rec createGraph (g:graph) = function
          let ideq = let free = Free 0 in Type ("Func", [free; free; Type ("Bool", [])]) in
          let cons = (
              match op with
-             | "+" -> id2
-             | "-" -> id2
-             | "*" -> id2
-             | "/" -> id2
-             | "%" -> id2
-             | "<" -> ideq
-             | ">" -> ideq
-             | "=" -> ideq
-             | "<=" -> ideq
-             | ">=" -> ideq
-             | "!=" -> ideq
+             | "+" -> id2 | "-" -> id2 | "*" -> id2 | "/" -> id2 | "%" -> id2
+             | "<" -> ideq | ">" -> ideq | "=" -> ideq
+             | "<=" -> ideq | ">=" -> ideq | "!=" -> ideq
              | _ -> id2) in
          Graph.addCons g t (Call ((cons, [Term lt; Term rt])));
       | _ -> failwith "invalid type term in binop");

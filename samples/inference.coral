@@ -11,4 +11,4 @@ func takesInt(n):
   n + 1
 
 func takesIntAlso(c):
-  takesInt c
+  1 + takesInt c
