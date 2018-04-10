@@ -97,9 +97,56 @@ let rec createGraph (g:graph) = function
          Some term)
   | n -> Printf.printf "Resolving Type: %s\n" (nodeName n); None
 
+let applySolution solution =
+  let rec constraint_to_type = function
+    | Type (name, cons) ->
+       let cons2 = List.map constraint_to_type cons in
+       let cons_v = List.fold_left (fun a -> function | None -> a | Some(n) -> n :: a) [] cons2 in
+       Some(
+           match List.length cons_v with
+           | 0 -> Ast.Type name
+           | n when n <> List.length cons2 -> failwith "mismatched type lengths"
+           | n -> Parameterized (name, cons_v))
+    | _ -> None in
+
+  let rec applyType cons_type node =
+    match node with
+     | Func (name, Type(""), params, body) as f ->
+        Printf.printf "func name %s returns %s\n" name (type_to_string cons_type);
+        (match cons_type with
+        | Parameterized ("Func", cons_params) ->
+           let (ret :: ptypes) = List.rev cons_params in
+           let newparams = List.map2 applyType ptypes (List.rev params |> List.map (fun v -> Def v)) in
+           Func (name,
+                 ret,
+                 List.rev newparams |> List.map (function | Def v -> v),
+                 body)
+        | _ -> f)
+     | Def v as d ->
+        Printf.printf "def (%s) is typed %s\n" v.name (type_to_string cons_type);
+        d
+     | Let (v, value) ->
+        Printf.printf "let (%s) is typed %s\n" v.name (type_to_string cons_type);
+        Let(v, value)
+     | Return v ->
+        Printf.printf "return is typed %s\n" (type_to_string cons_type);
+        Return v
+     | n -> n
+  in
+  let apply = function
+    | {contents=({node=Some(e)}, (Type _ as t))} ->
+       (match constraint_to_type t with
+        | None -> ()
+        | Some(cons_type) -> ignore (applyType cons_type e))
+    | _ -> () in
+  List.iter apply solution.active_edges;
+  0
+
 let run m =
   let graph = Graph.create () in
-  ignore (createGraph graph m);
-  solve graph |> ignore;
-  (* let solution = Graph.solve graph; *)
+  let term = createGraph graph m in ignore term;
+  let solution = Solution.solve graph in
+  Solution.show solution;
+  applySolution solution;
+  Ast.show m;
   m

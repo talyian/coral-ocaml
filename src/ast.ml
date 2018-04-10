@@ -4,7 +4,16 @@ type coraltype =
   | Parameterized of (string * coraltype list)
   | Dotted of coraltype list
 
-type varNode = {name:string; mutable target: node option}
+let rec type_to_string = function
+  | Free -> "free"
+  | Type s -> s
+  | Parameterized (name, params) -> name ^ "[" ^ String.concat ", " (List.map type_to_string params) ^ "]"
+  | Dotted (n) -> "dotted"
+
+type varNode = {
+    name:string;
+    mutable target: node option;
+}
 and defNode = {name:string; defType:coraltype option}
 and node =
   | Module of (node list)
@@ -53,7 +62,9 @@ let rec show1 indent (is_inline:bool) node =
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
   | Func (name, ret_type, params, body) ->
-     printf "func %s(" name;
+     (match ret_type with
+      | Type "" -> printf "func %s(" name
+      | tt -> printf "func %s: %s(" name (type_to_string ret_type));
      let rec loop = function
        | [] -> ()
        | p :: xs ->

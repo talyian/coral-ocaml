@@ -28,9 +28,9 @@ main
 
 line
   : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block
-    { Func(name, Type("void"), p, body) }
+    { Func(name, Type(""), p, body) }
   | FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN NEWLINE
-    { Func(name, Type("void"), p, Empty) }
+    { Func(name, Type(""), p, Empty) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN body=block
     { Func(name, ret, p, body) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE

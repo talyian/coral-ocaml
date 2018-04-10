@@ -1,0 +1,38 @@
+* TODO Finish Type inference on functions
+  We need to apply all the constraints to the AST tree.
+  Easiest way is probably to make all the nodes mutable
+
+* TODO Implement Named Tuples
+  #+BEGIN_SRC
+  type Pt = {x: Float64, y:Float64}
+  let p = Pt(10.0, 20.0)
+  let q = Pt(x=10.0, y=20.0)
+  let x = p.x
+  let y = q.y
+  #+END_SRC
+
+* TODO Implement Named Unions
+  #+BEGIN_SRC
+  type Day = {WeekDay: Int8 | Saturday | Sunday}
+  let p = Day.Saturday
+  let q = Day.Sunday
+  let v = match p:
+    | Weekday(n): n
+    | Saturday: 6
+    | Sunday: 7
+  #+END_SRC
+
+* TODO Implement Anonymous Tuples
+  #+BEGIN_SRC
+  let p = (1, 2.0, "foobar")
+  #+END_SRC
+
+* TODO Implement Overloaded functions on types
+  #+BEGIN_SRC
+  let p = Pt(3.0, 4.0)
+  let s = "asdf"
+  length s
+  length p
+  #+END_SRC
+** TODO Step 1: Implement with return-type inference
+** TODO Step 2: Implement with Union-based parameter type inference

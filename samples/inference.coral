@@ -12,3 +12,6 @@ func takesInt(n):
 
 func takesIntAlso(c):
   1 + takesInt c
+
+func returnsString: String():
+  "a"
