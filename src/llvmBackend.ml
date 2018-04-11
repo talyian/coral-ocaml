@@ -1,6 +1,7 @@
 open Llvm
 open Ast
 open Ctypes
+open Ansicolor
 
 module AstMap = Map.Make(struct type t = Ast.node let compare = compare end)
 
@@ -27,6 +28,8 @@ let rec llvmType context = function
      | "Float64" -> Llvm.double_type context
      | "Float64" -> Llvm.double_type context
      | "Ptr" -> Llvm.pointer_type (Llvm.i8_type context)
+     | "String" -> Llvm.pointer_type (Llvm.i8_type context)
+     | "Tuple" -> Llvm.void_type context
      | _ -> Printf.eprintf "Unknown Type: '%s'\n" s; Llvm.i64_type context
      )
   | Parameterized(name, params) ->
@@ -41,7 +44,7 @@ let rec llvmType context = function
                 |> List.map (llvmType context)
                 |> Array.of_list)
           | [] -> failwith "function: no return type!")
-        | _ -> Printf.eprintf "Unknown Type: '%s'\n" name; Llvm.i64_type context
+      | _ -> Printf.eprintf "Unknown Type: '%s'\n" (as_rgb (5, 1, 1) name); Llvm.i64_type context
      )
   | _ -> failwith "Unknown type"
 
@@ -54,7 +57,7 @@ let rec run1 llvalues = function
           lvModule
        | line :: xs ->
           (match line with
-           | Func (name, ret_type, params, body) as f ->
+           | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
               let llret = llvmType lvContext ret_type in
               let vararg =
                 params
@@ -90,13 +93,17 @@ let rec run1 llvalues = function
   | _ -> failwith "oops 1"
 
 and run_func context = function
-  | Func (name, ret_type, params, body) as f ->
-     let rec loop i = function | [] -> ()
-       | p :: xs ->
-          let lldef = Llvm.param context.func i in
-          context.llvalues <- AstMap.add (Def p) lldef context.llvalues;
-          loop (i + 1) xs in
-     loop 0 params;
+  | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
+     let rec loop i p =
+       match p.defType with
+       | None -> failwith "def has no type"
+       | Some(def_type) ->
+           let lltype = llvmType context.context def_type in
+           let lldef = Llvm.param context.func i in
+           let alloca = Llvm.build_alloca lltype p.name context.builder in
+           let store = Llvm.build_store lldef alloca context.builder in
+           context.llvalues <- AstMap.add (Def p) alloca context.llvalues
+     in List.iteri loop params;
      run_func context body
   | Block body ->
      let rec looper = function | [] -> ()
@@ -129,8 +136,13 @@ and run_func context = function
   | IntLiteral n -> Llvm.const_int (Llvm.i64_type context.context) (int_of_string n)
   | FloatLiteral n -> Llvm.const_float (Llvm.double_type context.context) (float_of_string n)
   | Binop(op, lhs, rhs) ->
-     let recurse = run_func context in
-     let apply f = f (recurse lhs) (recurse rhs) "" context.builder in
+     let get_value = function
+       (* | Var v -> Llvm.build_load (run_func context (Var v)) v.name context.builder *)
+       | node -> run_func context node in
+     let apply f =
+       let lval = get_value lhs in
+       let rval = get_value rhs in
+       f lval rval "" context.builder in
      (match op with
      | "<" -> apply (Llvm.build_icmp Icmp.Slt)
      | "=" -> apply (Llvm.build_icmp Icmp.Eq)
@@ -140,8 +152,7 @@ and run_func context = function
      | "/" -> apply Llvm.build_sdiv
      | "%" -> apply Llvm.build_srem
      | _ -> failwith ("unknown operator " ^ op))
-  | Def d_info ->
-     Llvm.const_int (Llvm.i32_type context.context) 0;
+  | Def d_info -> Llvm.const_int (Llvm.i32_type context.context) 0;
   | Return(v) ->
      context.isTerminated <- true;
      (match v with
@@ -160,12 +171,16 @@ and run_func context = function
          llcallee)
   | Var v_info ->
      (match v_info.target with
+      | Some(Let (var, value) as letnode) ->
+         let value = AstMap.find letnode context.llvalues in
+         Llvm.build_load value v_info.name context.builder
+      | Some(Def n as defnode) ->
+         let value = AstMap.find defnode context.llvalues in
+         Llvm.build_load value v_info.name context.builder
       | Some(v) ->
-         (try
-            AstMap.find v context.llvalues
-          with Not_found ->
-            Printf.printf "hmmm %s \n" v_info.name;
-            run_func context v)
+         let value = AstMap.find v context.llvalues in
+         value
+         (* Llvm.build_load value v_info.name context.builder *)
       | None ->
          let c = context.context in
          let f = (Llvm.declare_function
@@ -181,6 +196,15 @@ and run_func context = function
      let globstr = Llvm.build_global_stringptr s "" context.builder in
      globstr
   | Empty -> Llvm.const_int (Llvm.i32_type context.context) 0
+  | Let (var, value) as letnode ->
+     (match var.varType with
+      | None -> failwith ("allocating unknown variable type " ^  var.name)
+      | Some(vt) ->
+         let llvm_type = llvmType context.context vt in
+         let alloca = Llvm.build_alloca llvm_type var.name context.builder in
+         context.llvalues <- AstMap.add letnode alloca context.llvalues;
+         alloca
+     )
   | n ->
      Printf.printf "Unhandled codegen: ";
      Ast.show n;
@@ -200,7 +224,9 @@ let jit coralModule =
     Printexc.to_string exc |> print_string;
     0
 let run x =
-  (* run1 (AstMap.empty) x |> Llvm.string_of_llmodule |> print_string; *)
+  (* run1 (AstMap.empty) x |> Llvm.string_of_llmodule |> print_string;
+   * run1 (AstMap.empty) x |> Llvm.string_of_llmodule |> print_string; *)
+  Printf.printf "Jitting...\n";
   flush stdout;
-  jit x;
+  (* jit x; *)
   0

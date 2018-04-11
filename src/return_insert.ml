@@ -4,8 +4,10 @@ open Ast
 
 let rec find_function = function
   | Module lines -> Module(List.map find_function lines)
-  | Func (a, b, c, Empty) -> Func(a, b, c, Empty)
-  | Func (a, b, c, d) -> Func(a, b, c, rewrite b d)
+  | Func {name=name; ret_type=ret_type; params=params; body=Empty} ->
+     Func (newFunc(name, ret_type, params, Empty))
+  | Func {name=name; ret_type=ret_type; params=params; body=body} ->
+     Func (newFunc(name, ret_type, params, rewrite ret_type body))
   | n -> n
 and rewrite retType = function
   | If (cond, ifbody, elsebody) -> If (cond, rewrite retType ifbody, rewrite retType elsebody)

@@ -5,8 +5,8 @@ open Ast
 %token <string> INTEGER
 %token <string> FLOAT
 %token <string> OPERATOR IDENTIFIER STRING
-%token <int> NEWLINE
 %token <char> OTHER
+%token <int> NEWLINE
 %token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
 %token LPAREN RPAREN COLON INDENT DEDENT
 %token EQ
@@ -28,15 +28,15 @@ main
 
 line
   : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block
-    { Func(name, Type(""), p, body) }
+    { Func(newFunc (name, Type(""), p, body)) }
   | FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN NEWLINE
-    { Func(name, Type(""), p, Empty) }
+    { Func(newFunc (name, Type(""), p, Empty)) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN body=block
-    { Func(name, ret, p, body) }
+    { Func(newFunc (name, ret, p, body)) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE
-    { Func(name, ret, p, Empty) }
-  | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None}, e) }
-  | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None}, e) }
+    { Func(newFunc (name, ret, p, Empty)) }
+  | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None;varType=None}, e) }
+  | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None;varType=None}, e) }
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
 
@@ -59,7 +59,7 @@ block_or_line
 expr
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
-  | e=IDENTIFIER { Var {name=e; target=None} }
+  | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
   | e=STRING { StringLiteral e }
   | lhs=expr op=OPERATOR rhs=expr { Binop (op, lhs, rhs) }
   | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }

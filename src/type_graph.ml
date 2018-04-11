@@ -175,11 +175,11 @@ type unifyResult =
   | Defer
 
 let rec unify solution term left right =
-  (* (printf "\t\tUnifying %s: %s <-> %s\n"
-   *    term.name
-   *    (Graph.cons_to_string left)
-   *    (Graph.cons_to_string right)
-   * ); *)
+  (printf "\t\tUnifying %s: %s <-> %s\n"
+     term.name
+     (Graph.cons_to_string left)
+     (Graph.cons_to_string right)
+  );
   match left, right with
   | (_, Free i) -> failwith "Unifying a free variable"
   | (Free i, _) -> failwith "Unifying a free variable"
@@ -194,7 +194,7 @@ let rec unify solution term left right =
      solution.active_terms <- t :: solution.active_terms;
      Success
   | (Call (a, a_args), Call (b, b_args)) ->
-     printf "unifying 2 calls....\n";
+     (* printf "unifying 2 calls....\n"; *)
      Defer
   | (_, Call _) -> unify solution term right left
   | (Call (Type ("Func", params), args), Term t) ->
@@ -208,19 +208,20 @@ let rec unify solution term left right =
         Success)
   | (Call _ as c , other) ->
      solution.active_edges <- ref (term, right) :: ref (term, left) :: solution.active_edges;
-     solution.active_terms <- term :: solution.active_terms;
+     solution.active_terms <- solution.active_terms;
      Defer
   | (Type (a, ap), Type (b, bp)) ->
      if a <> b then
        failwith (sprintf "bad unification: %s <-> %s\n" a b)
      else
        let result = List.map2 (unify solution term) ap bp in
-       List.fold_left (fun a b -> match a, b with
-                                  | Success, Success -> Success
-                                  | Fail, _ -> Fail
-                                  | _, Fail -> Fail
-                                  | _ -> Defer
-         ) Success result
+       List.fold_left (
+           fun a b ->
+           match a, b with
+           | Success, Success -> Success
+           | Fail, _ -> Fail
+           | _, Fail -> Fail
+           | _ -> Defer) Success result
   | _ ->
      show solution;
      printf "Unifying\n";
@@ -228,22 +229,27 @@ let rec unify solution term left right =
      printf "    %s\n" (Graph.cons_to_string right);
      failwith "Unhandled Unification\n"
 
-(* at each step in the solution, we record progress made. If no progress, the solution is complete *)
-type solveStepResult =
-  | Progress
-  | NoProgress
+(* At each step in the solution, we record progress made.
+ * If no progress, the solution is complete *)
+type solveStepResult = | Progress | NoProgress
 
 let rec solve graph =
   let solution = createSolutionFromGraph graph in
   Graph.show graph;
   show solution;
   let rec run_step i =
-    List.map (runStep solution) solution.active_terms
-    |> List.fold_left
-         (fun a b -> match a, b with | NoProgress , NoProgress -> NoProgress | _ -> Progress) NoProgress
-    |> (function
-        | Progress -> run_step (i + 1)
-        | NoProgress -> printf "Solution finished in %d steps\n" i) in
+    if i > 1000 then
+      printf "Aborting Solution\n"
+    else
+      let stepresults = List.map (runStep solution) solution.active_terms in
+      let result =
+        List.fold_left (fun a b ->
+          match a, b with
+          | NoProgress , NoProgress -> NoProgress
+          | _ -> Progress) NoProgress stepresults in
+      (match result with
+       | Progress -> run_step (i + 1)
+       | NoProgress -> printf "Solution finished in %d steps\n" i) in
   run_step 0;
   solution;
 
@@ -284,16 +290,13 @@ and runStep solution term =
       * and replace with N-1 terms.
       * TODO -- we can remove the term from the active list completely if we also substitute
       * in the final unification result into all the replacement terms *)
-
      List.iter (remove_constraint solution term) cons;
      flush stdout;
      (let loop c1 c2 =
-        (* printf "%s <-> %s\n" (Graph.cons_to_string c1) (Graph.cons_to_string c2); *)
-        (match unify solution term c1 c2 with
-         | Defer -> c2
-         | Success -> c2
-         | Fail -> c2)
-      in
-      match List.fold_left loop (Term term) cons with
-      | _ -> NoProgress);
+        (printf "\t %s: %s <-> %s\n"
+           term.name
+           (Graph.cons_to_string c1)
+           (Graph.cons_to_string c2));
+        (match unify solution term c1 c2 with | Defer -> c2 | Success -> c2 | Fail -> c2) in
+      match List.fold_left loop (Term term) cons with | _ -> NoProgress);
 end

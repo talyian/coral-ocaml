@@ -12,12 +12,22 @@ let rec type_to_string = function
 
 type varNode = {
     name:string;
+    mutable varType: coraltype option;
     mutable target: node option;
 }
-and defNode = {name:string; defType:coraltype option}
+and defNode = {
+    name: string;
+    mutable defType:coraltype option
+}
+and funcNode = {
+    name:string;
+    mutable ret_type: coraltype;
+    params: defNode list;
+    body: node;
+}
 and node =
   | Module of (node list)
-  | Func of string * coraltype * defNode list * node
+  | Func of funcNode
   | Comment of (string)
   | Binop of (string * node * node)
   | If of (node * node * node)
@@ -34,6 +44,12 @@ and node =
   | Return of node
   | Empty
 
+let newFunc (name, ret, params, body) = {
+    name=name;
+    ret_type=ret;
+    params=params;
+    body=body }
+                                                 
 let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set"
 
 open Printf
@@ -61,7 +77,7 @@ let rec show1 indent (is_inline:bool) node =
         if not is_inline then show_indent indent;
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
-  | Func (name, ret_type, params, body) ->
+  | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
       | Type "" -> printf "func %s(" name
       | tt -> printf "func %s: %s(" name (type_to_string ret_type));
@@ -79,8 +95,14 @@ let rec show1 indent (is_inline:bool) node =
     (match node with
     | Module (lines) ->
        List.iter (show1 indent is_inline) lines
-    | Def x -> printf "%s" x.name
-    | Var s -> printf "%s" s.name
+    | Def x ->
+       (match x.defType with
+       | None -> printf "%s" x.name
+       | Some(t) -> printf "%s: %s" x.name (type_to_string t))
+    | Var s ->
+       (match s.varType with
+        | None -> printf "%s" s.name
+        | Some(t) -> printf "%s: %s" s.name (type_to_string t))
     | StringLiteral s ->
        let r = Str.regexp "\n" in
        printf "\"%s\"" (Str.global_replace r "\\n" s)

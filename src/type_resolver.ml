@@ -10,7 +10,7 @@ let rec createGraph (g:graph) = function
   |  Block list ->
      let terms = (List.map (createGraph g) list) in
      List.rev terms |> List.hd
-  | Func(name, ret, params, body) as f ->
+  | Func{name=name; ret_type=ret_type; params=params; body=body} as f ->
      (* let g = List.fold_left (fun g (p:defNode) -> (p.name, Def p) :: g) g params in *)
      (* let g = (name, f) :: g in *)
      let t = Graph.addTerm g name f in
@@ -111,25 +111,24 @@ let applySolution solution =
 
   let rec applyType cons_type node =
     match node with
-     | Func (name, Type(""), params, body) as f ->
-        Printf.printf "func name %s returns %s\n" name (type_to_string cons_type);
+     | Func func as f ->
+        (* Printf.printf "func name %s returns %s\n" func.name (type_to_string cons_type); *)
         (match cons_type with
         | Parameterized ("Func", cons_params) ->
            let (ret :: ptypes) = List.rev cons_params in
-           let newparams = List.map2 applyType ptypes (List.rev params |> List.map (fun v -> Def v)) in
-           Func (name,
-                 ret,
-                 List.rev newparams |> List.map (function | Def v -> v),
-                 body)
+           let newparams = List.map2 applyType ptypes (List.rev func.params |> List.map (fun v -> Def v)) in
+           func.ret_type <- ret; f
         | _ -> f)
      | Def v as d ->
-        Printf.printf "def (%s) is typed %s\n" v.name (type_to_string cons_type);
+        (* Printf.printf "def (%s) is typed %s\n" v.name (type_to_string cons_type); *)
+        v.defType <- Some cons_type;
         d
      | Let (v, value) ->
-        Printf.printf "let (%s) is typed %s\n" v.name (type_to_string cons_type);
+        (* Printf.printf "let (%s) is typed %s\n" v.name (type_to_string cons_type); *)
+        v.varType <- Some cons_type;
         Let(v, value)
      | Return v ->
-        Printf.printf "return is typed %s\n" (type_to_string cons_type);
+        (* Printf.printf "return is typed %s\n" (type_to_string cons_type); *)
         Return v
      | n -> n
   in

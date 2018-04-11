@@ -5,7 +5,7 @@ type moduleExprAction = Noop | AddToMain | IsMain
 
 let moduleExprAction = function
   | Module _ -> Noop
-  | Func (name, rettype, params, body) when name == ".init" -> IsMain
+  | Func {name=name; ret_type=rettype} when name == ".init" -> IsMain
   | Func _ -> Noop
   | _ -> AddToMain
 
@@ -17,7 +17,7 @@ let run = function
           let main = match main with
             | None ->
                let body = Ast.Block (List.rev (Return (Tuple []) :: move_lines)) in
-               Ast.Func(".init", Type("Void"), [], body)
+               Ast.Func (newFunc(".init", Type("Void"), [], body))
             | Some f -> f
           in Module(main :: leave_lines |> List.rev)
        | line :: xs ->

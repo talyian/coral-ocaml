@@ -1,3 +1,5 @@
+func printf : Void (fmt: String, ...)
+
 func returnsInt():
   let a = 1
   let b = 2
@@ -15,3 +17,5 @@ func takesIntAlso(c):
 
 func returnsString: String():
   "a"
+
+printf ("%s\n", "Hello, World!")
