@@ -1,4 +1,5 @@
 func printf : Void (fmt: String, ...)
+func strlen : Int64 (s: String)
 
 func returnsInt():
   let a = 1
@@ -19,3 +20,7 @@ func returnsString: String():
   "a"
 
 printf ("%s\n", "Hello, World!")
+printf ("%s\n", returnsString ())
+printf ("%ld\n", strlen "beef")
+printf ("%ld\n", takesIntAlso 10)
+printf ("%ld\n", returnsInt())

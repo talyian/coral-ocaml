@@ -12,5 +12,7 @@ main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.
 	-package ctypes \
 	-package llvm.executionengine \
 	-package llvm.analysis \
+	-package llvm.passmgr_builder \
+	-package llvm \
 	-package str \
 	-package core
