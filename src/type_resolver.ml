@@ -29,7 +29,7 @@ let rec createGraph (g:graph) = function
      let term = Graph.addTerm g "if" i in
      (match if_term, else_term with
       | Some(it), Some(et) ->
-         Graph.addCons g term (Union(Term it, Term et));
+         Graph.addCons g term (Union [Term it; Term et]);
          ignore cond_term;
          Some term
       | _ -> failwith "invalid terms in if type analysis")
@@ -45,7 +45,7 @@ let rec createGraph (g:graph) = function
      Graph.addCons g t cons;
      Some t
   | StringLiteral i as v ->
-     let t = Graph.addTerm g ("s" ^ i) v in
+     let t = Graph.addTerm g ("s" ^ string_escape i) v in
      let cons = (Type ("String", [])) in
      Graph.addCons g t cons; Some t
   | FloatLiteral i as v ->
@@ -95,7 +95,15 @@ let rec createGraph (g:graph) = function
          let term = Graph.addTerm g ("call." ^ callee_term.name) x in
          Graph.addCons g term (Call (Term callee_term, terms));
          Some term)
-  | n -> Printf.printf "Resolving Type: %s\n" (nodeName n); None
+  | Multifunc (name, funcs) as mf ->
+     let term = Graph.addTerm g name mf in
+     let func_terms = funcs
+                      |> List.map (fun f -> createGraph g (Func f))
+                      |> List.map (function | Some n -> Term n | _ -> failwith "missing term")
+     in
+     Graph.addCons g term (Union func_terms);
+     Some term
+  | n -> Printf.printf "Type-resolving Type: %s\n" (nodeName n); None
 
 let applySolution solution =
   let rec constraint_to_type = function

@@ -26,6 +26,10 @@ let rec run1 scope = function
      let scope = List.fold_left (fun s p -> fst(run1 s (Def p))) scope params in
      let scope, body = run1 scope body in
      scope, f
+  | Multifunc (name, funcs) as mf ->
+     let mf_scope = addName name mf scope in
+     List.map (fun f -> run1 mf_scope (Func f)) funcs |> ignore;
+     mf_scope, mf
   | If(cond, ifbody, elsebody) as x ->
      ignore (run1 scope cond);
      ignore (run1 scope ifbody);
@@ -64,7 +68,6 @@ let rec run1 scope = function
   | Return v as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
   | x ->
-     Printf.printf "Warning: Unhandled node for name resolver\n";
-     Ast.show x;
+     Printf.printf "Warning: Unhandled node for name resolver: %s\n" (Ast.nodeName x);
      scope, x
 let run x = snd (run1 {parent=None; names=StringMap.empty} x)

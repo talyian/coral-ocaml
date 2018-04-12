@@ -139,19 +139,28 @@ and run_func context = function
      let get_value = function
        (* | Var v -> Llvm.build_load (run_func context (Var v)) v.name context.builder *)
        | node -> run_func context node in
-     let apply f =
-       let lval = get_value lhs in
-       let rval = get_value rhs in
-       f lval rval "" context.builder in
-     (match op with
-     | "<" -> apply (Llvm.build_icmp Icmp.Slt)
-     | "=" -> apply (Llvm.build_icmp Icmp.Eq)
-     | "+" -> apply Llvm.build_add
-     | "-" -> apply Llvm.build_sub
-     | "*" -> apply Llvm.build_mul
-     | "/" -> apply Llvm.build_sdiv
-     | "%" -> apply Llvm.build_srem
-     | _ -> failwith ("unknown operator " ^ op))
+     let lval = get_value lhs in
+     let rval = get_value rhs in
+     if Llvm.type_of lval = Llvm.double_type context.context then
+         (match op with
+         | "<" -> Llvm.build_fcmp Fcmp.Ult lval rval "" context.builder
+         | "=" -> Llvm.build_fcmp Fcmp.Ueq lval rval "" context.builder
+         | "+" -> Llvm.build_fadd lval rval "" context.builder
+         | "-" -> Llvm.build_fsub lval rval "" context.builder
+         | "*" -> Llvm.build_fmul lval rval "" context.builder
+         | "/" -> Llvm.build_fdiv lval rval "" context.builder
+         | "%" -> Llvm.build_frem lval rval "" context.builder
+         | _ -> failwith ("unknown operator " ^ op))
+     else
+         (match op with
+         | "<" -> Llvm.build_icmp Icmp.Slt lval rval "" context.builder
+         | "=" -> Llvm.build_icmp Icmp.Eq lval rval "" context.builder
+         | "+" -> Llvm.build_add lval rval "" context.builder
+         | "-" -> Llvm.build_sub lval rval "" context.builder
+         | "*" -> Llvm.build_mul lval rval "" context.builder
+         | "/" -> Llvm.build_sdiv lval rval "" context.builder
+         | "%" -> Llvm.build_srem lval rval "" context.builder
+         | _ -> failwith ("unknown operator " ^ op))
   | Def d_info -> Llvm.const_int (Llvm.i32_type context.context) 0;
   | Return(v) ->
      context.isTerminated <- true;
@@ -163,6 +172,11 @@ and run_func context = function
      let llcallee = (run_func context callee) in
      let llargs = List.map (run_func context) args |> Array.of_list in
      (* Llvm.build_call llcallee llargs "" context.builder *)
+     (* Printf.printf "%s\n" (as_rgb (5, 0, 0) "calling ");
+      * Ast.show callee;
+      * let rec loop = function
+      *   | [] -> ()
+      *   | x :: xs -> print_char '('; Ast.show x; print_char ')'; loop xs in loop args; *)
      (match Llvm.classify_value llcallee with
       | Llvm.ValueKind.Function -> Llvm.build_call llcallee llargs "" context.builder
       | _ ->
@@ -202,6 +216,8 @@ and run_func context = function
       | Some(vt) ->
          let llvm_type = llvmType context.context vt in
          let alloca = Llvm.build_alloca llvm_type var.name context.builder in
+         let llvalue = run_func context value in
+         let sto = Llvm.build_store llvalue alloca context.builder in
          context.llvalues <- AstMap.add letnode alloca context.llvalues;
          alloca
      )
@@ -213,6 +229,15 @@ and run_func context = function
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
   Llvm_analysis.assert_valid_module llmodule;
+
+  let passmgrbuilder = Llvm_passmgr_builder.create () in
+  let module_passmgr = Llvm.PassManager.create () in
+  ignore (Llvm_passmgr_builder.set_opt_level 3 passmgrbuilder);
+  Llvm_passmgr_builder.populate_module_pass_manager module_passmgr passmgrbuilder;
+  ignore (Llvm.PassManager.run_module llmodule module_passmgr);
+
+  Llvm.string_of_llmodule llmodule |> print_string;
+  flush stdout;
   try
     ignore (Llvm_executionengine.initialize());
     let llengine = Llvm_executionengine.create llmodule in
@@ -224,9 +249,7 @@ let jit coralModule =
     Printexc.to_string exc |> print_string;
     0
 let run x =
-  (* run1 (AstMap.empty) x |> Llvm.string_of_llmodule |> print_string;
-   * run1 (AstMap.empty) x |> Llvm.string_of_llmodule |> print_string; *)
   Printf.printf "Jitting...\n";
   flush stdout;
-  (* jit x; *)
+  jit x;
   0

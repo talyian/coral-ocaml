@@ -13,7 +13,7 @@ type cons =
   | Type of string * cons list
   | Call of cons * cons list
   | Member of cons * string
-  | Union of cons * cons
+  | Union of cons list
 
 type graph = {
   mutable names: term StringMap.t;
@@ -49,7 +49,7 @@ module Graph = struct
     try
       List.find (function | {node=Some n} when n = astnode -> true | _ -> false) graph.terms
     with exc ->
-      Printf.eprintf "failed to find node %s\n" (nodeName astnode);
+      Printf.eprintf "Type graph: failed to find referred node %s\n" (nodeName astnode);
       Ast.show astnode;
       raise exc
 
@@ -57,7 +57,9 @@ module Graph = struct
 
   let rec cons_to_string = function
     | Term t -> as_rgb (5, 2, 3)  t.name
-    | Union (a, b) -> cons_to_string a ^ " <=> " ^ cons_to_string b
+    | Union ([a]) -> cons_to_string a
+    | Union (a :: xs) -> cons_to_string a ^ " | " ^ (cons_to_string (Union xs))
+    | Union ([]) -> ""
     | Free i -> as_rgb (5, 5, 5) ("τ" ^ string_of_int i)
     | Type (name, params) ->
        (match params with
@@ -123,6 +125,7 @@ let replace_term solution term constr =
        else x
     | Type (n, params) -> Type (n, List.map (replace_c t) params)
     | Call (a, b) -> Call(replace_c t a, List.map (replace_c t) b)
+    | Union cases -> Union (List.map (replace_c t) cases)
     | x -> x in
   let rec loop = function
     | [] -> ()
@@ -170,29 +173,36 @@ let rec instantiate solution instances = function
   | n -> n
 
 type unifyResult =
-  | Success
-  | Fail
+  (* successfully unified, here are better constraints *)
+  | Success of (term * cons) list
+  (* no solutions available *)
+  | Fail of string
+  (* Needs more info to unify *)
   | Defer
 
 let rec unify solution term left right =
-  (printf "\t\tUnifying %s: %s <-> %s\n"
+  (printf "\027[38;5;96m\tUnifying %s: %s == %s\027[0m\n"
      term.name
      (Graph.cons_to_string left)
      (Graph.cons_to_string right)
   );
   match left, right with
-  | (_, Free i) -> failwith "Unifying a free variable"
-  | (Free i, _) -> failwith "Unifying a free variable"
+  | (_, Free i) -> Fail "Unifying a free variable"
+  | (Free i, _) -> Fail "Unifying a free variable"
   | (Term t, Term u) ->
-     solution.active_edges <- ref (t, Term u) :: solution.active_edges;
-     solution.active_terms <- u :: t :: solution.active_terms;
-     (* printf "adding %s <-> %s\n" (t.name) (u.name); *)
-     Success
+     if t.name = u.name then
+       Success []
+     else
+       Success [(t, Term u)]
   | (Type _, Term t) -> unify solution term right left
   | (Term t, (Type _ as y)) ->
      solution.active_edges <- ref (t, y) :: solution.active_edges;
      solution.active_terms <- t :: solution.active_terms;
-     Success
+     Defer
+  | (Term t, (Union m as u)) ->
+     solution.active_edges <- ref (t, u) :: solution.active_edges;
+     solution.active_terms <- t :: solution.active_terms;
+     Defer
   | (Call (a, a_args), Call (b, b_args)) ->
      (* printf "unifying 2 calls....\n"; *)
      Defer
@@ -201,26 +211,33 @@ let rec unify solution term left right =
      let instances = ref IntMap.empty in
      let params = List.map (instantiate solution instances) params in
      (match List.rev params with
-     | [] -> failwith "bad params in unification"
+     | [] -> Fail "parameter count mismatch"
      | retval :: rparams ->
         let rs = List.map2 (unify solution term) rparams (List.rev args) in
         let r2 = unify solution term retval (Term t) in
         Success)
+  | (Call (Union cases, args), other) ->
+     let try_case case = unify solution term (Call (case, args)) other in
+     let successes = List.filter (fun c -> try_case c = Success) cases in
+     (match successes with
+      | [] -> Defer
+      | [item] -> Defer
+      | _ -> Defer)
   | (Call _ as c , other) ->
-     solution.active_edges <- ref (term, right) :: ref (term, left) :: solution.active_edges;
-     solution.active_terms <- solution.active_terms;
+     unify solution term (Term term) other;
+     solution.active_edges <- ref (term, c) :: solution.active_edges;
      Defer
   | (Type (a, ap), Type (b, bp)) ->
      if a <> b then
-       failwith (sprintf "bad unification: %s <-> %s\n" a b)
+       Fail (sprintf "Type mismatch: %s <-> %s\n" a b)
      else
        let result = List.map2 (unify solution term) ap bp in
        List.fold_left (
            fun a b ->
            match a, b with
            | Success, Success -> Success
-           | Fail, _ -> Fail
-           | _, Fail -> Fail
+           | Fail s, _ -> Fail s
+           | _, Fail s -> Fail s
            | _ -> Defer) Success result
   | _ ->
      show solution;
@@ -267,36 +284,21 @@ and runStep solution term =
      (* a single type constraint be subtituted into all references *)
      remove_term solution term;
      replace_term solution term (Type (t, params)); Progress
+  | [Union cases] ->
+     (* a single type constraint be subtituted into all references *)
+     remove_term solution term;
+     replace_term solution term (Union cases); Progress
   | cons ->
-     (* at each call site we instantiate a concrete term for each Free type in func.params *)
-     (* let rec handle_constraint cc =
-      *   (match cc with
-      *    | Call (Type ("Func", params), args) ->
-      *       let instances = ref IntMap.empty in
-      *       let params = List.map (instantiate solution instances) params in (
-      *           let a = List.rev args in
-      *           match List.rev params with
-      *           | [] -> failwith "something bad happened -- function doesn't have return type"
-      *           | c :: b ->
-      *           unify solution term c (Term term);
-      *           let result = List.map2 (unify solution term) a b in
-      *           remove_constraint solution term cc
-      *         )
-      *    | _ -> ())
-      * in
-      * List.iter handle_constraint cons; *)
-
      (* If we have N type / term constraints for a term, we can reduce the set
       * and replace with N-1 terms.
       * TODO -- we can remove the term from the active list completely if we also substitute
       * in the final unification result into all the replacement terms *)
-     List.iter (remove_constraint solution term) cons;
-     flush stdout;
+     List.iter (remove_constraint solution term) cons; flush stdout;
      (let loop c1 c2 =
-        (printf "\t %s: %s <-> %s\n"
-           term.name
-           (Graph.cons_to_string c1)
-           (Graph.cons_to_string c2));
-        (match unify solution term c1 c2 with | Defer -> c2 | Success -> c2 | Fail -> c2) in
+        (* (printf "\t %s: %s <-> %s\n"
+         *    term.name
+         *    (Graph.cons_to_string c1)
+         *    (Graph.cons_to_string c2)); *)
+        (match unify solution term c1 c2 with | Defer -> c2 | Success -> c2 | Fail s -> c2) in
       match List.fold_left loop (Term term) cons with | _ -> NoProgress);
 end

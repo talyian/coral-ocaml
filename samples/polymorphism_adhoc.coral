@@ -1,0 +1,7 @@
+func absolute: Float64(x: Float64):
+  0.0 - x
+
+func absolute: Int64(x: Int64):
+  0 - x
+
+let result = absolute 10.0

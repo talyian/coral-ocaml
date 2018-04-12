@@ -1,8 +1,13 @@
-* TODO Finish Type inference on functions
+* DONE Type inference on functions
   We need to apply all the constraints to the AST tree.
   Easiest way is probably to make all the nodes mutable
 
-* TODO Implement Named Tuples
+* TODO Implement Anonymous Tuples / lists
+  #+BEGIN_SRC
+  let p = (1, 2.0, "foobar")
+  #+END_SRC
+
+* [0/4] Implement Named Tuples
   #+BEGIN_SRC
   type Pt = {x: Float64, y:Float64}
   let p = Pt(10.0, 20.0)
@@ -10,24 +15,33 @@
   let x = p.x
   let y = q.y
   #+END_SRC
+** TODO implement syntax for named tuple declaration
+** TODO implement syntax for named tuple constructor
+** TODO implement syntax for named tuple constructor (keywords)
+** TODO implement syntax for named tuple field access
 
-* TODO Implement Named Unions
+* [0/3] Implement Named Unions
   #+BEGIN_SRC
-  type Day = {WeekDay: Int8 | Saturday | Sunday}
+  type Day = {WeekDay: Int8 + Saturday + Sunday}
   let p = Day.Saturday
   let q = Day.Sunday
   let v = match p:
-    | Weekday(n): n
-    | Saturday: 6
-    | Sunday: 7
+    Weekday(n): n
+    Saturday: 6
+    Sunday: 7
   #+END_SRC
-
-* TODO Implement Anonymous Tuples
+** TODO syntax for union declaration
+** TODO syntax for union case-constructors
+** TODO syntax for match expressions
+* TODO Implement Anonymous Unions
   #+BEGIN_SRC
-  let p = (1, 2.0, "foobar")
+  let p : {Int32 | String} = if rand_bool() { 1 } else { "zero" }
+  p + 3 # TypeError: (p:|String) + Int
+  match p:
+    Int32 (n):
+    String (s):
   #+END_SRC
-
-* TODO Implement Overloaded functions on types
+* [0/2] Implement Overloaded functions on types
   #+BEGIN_SRC
   let p = Pt(3.0, 4.0)
   let s = "asdf"

@@ -42,12 +42,13 @@ let parse lexbuf =
   try
     let m = Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf in
     m
+    |> Multifunc.run
     |> (fun m -> Ast.show m; m)
     |> Return_insert.run
     |> Init_func.run
     |> Name_resolver.run
     |> Type_resolver.run
-    |> LlvmBackend.run
+    (* |> LlvmBackend.run *)
     |> ignore;
     0;
   with exc ->
@@ -57,6 +58,6 @@ let parse lexbuf =
     raise exc
 
 let () =
-  let f = open_in "samples/inference.coral" in
+  let f = open_in "samples/polymorphism_adhoc.coral" in
   let lexbuf = Lexing.from_channel f in
   ignore (parse lexbuf)

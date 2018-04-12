@@ -24,10 +24,11 @@ and funcNode = {
     mutable ret_type: coraltype;
     params: defNode list;
     body: node;
-}
+  }
 and node =
   | Module of (node list)
   | Func of funcNode
+  | Multifunc of string * funcNode list
   | Comment of (string)
   | Binop of (string * node * node)
   | If of (node * node * node)
@@ -49,8 +50,8 @@ let newFunc (name, ret, params, body) = {
     ret_type=ret;
     params=params;
     body=body }
-                                                 
-let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set"
+
+let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc"
 
 open Printf
 
@@ -61,6 +62,10 @@ let needs_parentheses_for_call = function
   | Tuple _ -> true
   | Call _ -> true
   | _ -> false
+
+let string_escape s = s
+  |> Str.global_replace (Str.regexp "\n") "\\n"
+  |> Str.global_replace (Str.regexp "\t") "\\t"
 
 let rec show1 indent (is_inline:bool) node =
   match node with
@@ -77,6 +82,8 @@ let rec show1 indent (is_inline:bool) node =
         if not is_inline then show_indent indent;
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
+  | Multifunc (name, funcs) ->
+     List.iter (show1 indent is_inline) (List.map (fun f -> Func f) funcs)
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
       | Type "" -> printf "func %s(" name
@@ -103,9 +110,7 @@ let rec show1 indent (is_inline:bool) node =
        (match s.varType with
         | None -> printf "%s" s.name
         | Some(t) -> printf "%s: %s" s.name (type_to_string t))
-    | StringLiteral s ->
-       let r = Str.regexp "\n" in
-       printf "\"%s\"" (Str.global_replace r "\\n" s)
+    | StringLiteral s -> printf "\"%s\"" (string_escape s)
     | IntLiteral n -> printf "%s" n
     | FloatLiteral n -> printf "%s" n
     | Comment c -> printf "# %s" c
@@ -143,9 +148,10 @@ let rec show1 indent (is_inline:bool) node =
        printf " = ";
        show1 0 true value;
     | Tuple l -> printf "Tuple()";
+    | Multifunc _ -> printf "multifunc";
     | Func _ -> printf "func";
-    | If _ -> printf "func";
-    | Block _ -> printf "func";
+    | If _ -> printf "if";
+    | Block _ -> printf "block";
     | Empty -> printf "empty";
     );
     if not is_inline then printf "\n"

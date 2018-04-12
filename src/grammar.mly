@@ -63,6 +63,7 @@ expr
   | e=STRING { StringLiteral e }
   | lhs=expr op=OPERATOR rhs=expr { Binop (op, lhs, rhs) }
   | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }
+  | callee=expr LPAREN RPAREN { Call(callee, []) }
   | callee=expr arg=expr { Call(callee, [arg]) }
   | RETURN arg=expr { Return(arg) }
   | RETURN { Return (Tuple []) }
