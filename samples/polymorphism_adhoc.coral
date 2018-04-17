@@ -1,7 +1,12 @@
+func relative (x):
+   x + 1
+
 func absolute: Float64(x: Float64):
   0.0 - x
 
 func absolute: Int64(x: Int64):
   0 - x
 
-let result = absolute 10.0
+let a_float = absolute 10.0
+let a_int = absolute 10
+let b_int = relative 2

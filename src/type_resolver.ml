@@ -105,16 +105,15 @@ let rec createGraph (g:graph) = function
      Some term
   | n -> Printf.printf "Type-resolving Type: %s\n" (nodeName n); None
 
-let applySolution solution =
+let applySolution (solution:Solver.solution) =
   let rec constraint_to_type = function
     | Type (name, cons) ->
        let cons2 = List.map constraint_to_type cons in
        let cons_v = List.fold_left (fun a -> function | None -> a | Some(n) -> n :: a) [] cons2 in
-       Some(
-           match List.length cons_v with
-           | 0 -> Ast.Type name
-           | n when n <> List.length cons2 -> failwith "mismatched type lengths"
-           | n -> Parameterized (name, cons_v))
+       (match List.length cons_v with
+        | 0 -> Some(Ast.Type name)
+        | n when n <> List.length cons2 -> None
+        | n -> Some(Parameterized (name, cons_v)))
     | _ -> None in
 
   let rec applyType cons_type node =
@@ -141,19 +140,28 @@ let applySolution solution =
      | n -> n
   in
   let apply = function
-    | {contents=({node=Some(e)}, (Type _ as t))} ->
+    | {term={node=Some(e)}; cons=(Type _ as t)} ->
        (match constraint_to_type t with
         | None -> ()
         | Some(cons_type) -> ignore (applyType cons_type e))
     | _ -> () in
-  List.iter apply solution.active_edges;
+
+  solution.Solver.dependent_terms
+  |> TermMap.bindings
+  |> List.map (fun (t, edges) -> EdgeSet.elements edges)
+  |> List.concat
+  |> List.iter (fun e -> apply e);
   0
 
 let run m =
   let graph = Graph.create () in
-  let term = createGraph graph m in ignore term;
-  let solution = Solution.solve graph in
-  Solution.show solution;
+  let term = createGraph graph m in
+  ignore term;
+
+  let solution = Solver.init graph in
+  Solver.show solution;
+  let solution = Solver.solve solution in
+  Solver.show solution;
   applySolution solution;
   Ast.show m;
   m

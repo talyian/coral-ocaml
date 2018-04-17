@@ -4,8 +4,6 @@ open Ast
 open Ansicolor
 open Printf
 
-module StringMap = Map.Make(String)
-
 type term = { name: string; node: Ast.node option }
 type cons =
   | Term of term
@@ -15,18 +13,52 @@ type cons =
   | Member of cons * string
   | Union of cons list
 
+module StringMap = Map.Make(String)
+module IntMap = Map.Make(Int32)
+module TermMap = Map.Make(struct
+  type t = term
+  let compare a b = compare a.name b.name
+end)
+
 type graph = {
   mutable names: term StringMap.t;
   mutable terms: term list;
   mutable edges: (term * cons) list;
 }
 
-type solution = {
-  mutable names: term StringMap.t;
-  mutable active_terms: term list;
-  mutable inactive_terms: term list;
-  mutable active_edges: (term * cons) ref list;
+(* An edge in a solution *)
+type edge = {
+    term: term;
+    mutable cons: cons;
+    mutable active: bool;
 }
+
+module EdgeSet = Set.Make(struct
+  type t = edge
+  let compare a b = compare (a.term, a.cons) (b.term, b.cons)
+end)
+
+module Edge = struct
+  let equals a b = (a.term, a.cons) = (b.term, b.cons)
+
+  let rec dependent_terms e =
+    match e with
+    | Term t -> [t]
+    | Free f -> []
+    | Type (name, c) -> (c |> List.map dependent_terms |> List.concat)
+    | Call (callee, args) -> callee :: args |> List.map dependent_terms |> List.concat
+    | Member (a, b) -> dependent_terms a
+    | Union cases -> cases |> List.map dependent_terms |> List.concat
+
+  let rec replace_term term cons = function
+    | Term t -> if t.name = term.name then cons else Term t
+    | Free f -> Free f
+    | Type (name, c) -> Type(name, List.map (replace_term term cons) c)
+    | Call (callee, args) ->
+       Call(replace_term term cons callee,List.map (replace_term term cons) args)
+    | Member (a, b) -> Member(replace_term term cons a, b)
+    | Union cases -> Union(List.map (replace_term term cons) cases)
+end
 
 module Graph = struct
   let create () = { names=StringMap.empty; terms=[]; edges=[] }
@@ -53,13 +85,13 @@ module Graph = struct
       Ast.show astnode;
       raise exc
 
-  let addCons graph term cons = graph.edges <- (term, cons) :: graph.edges
+  let addCons (graph:graph) term cons = graph.edges <- (term, cons) :: graph.edges
 
   let rec cons_to_string = function
     | Term t -> as_rgb (5, 2, 3)  t.name
-    | Union ([a]) -> cons_to_string a
+    | Union [a] -> cons_to_string a
     | Union (a :: xs) -> cons_to_string a ^ " | " ^ (cons_to_string (Union xs))
-    | Union ([]) -> ""
+    | Union _ -> ""
     | Free i -> as_rgb (5, 5, 5) ("τ" ^ string_of_int i)
     | Type (name, params) ->
        (match params with
@@ -70,7 +102,7 @@ module Graph = struct
        Printf.sprintf "call(%s, %s)" (cons_to_string callee) args
     | Member(base, mem) -> "member." ^ mem
 
-  let show graph =
+  let show (graph:graph) =
     let rec loop = function
       | [] -> ()
       | (t, c) :: xs ->
@@ -78,227 +110,234 @@ module Graph = struct
          loop xs in loop graph.edges
 end
 
-module Solution = struct
-(* Solution Functions *)
-let createSolutionFromGraph graph = {
-  names=StringMap.empty;
-  active_terms=graph.terms; active_edges=List.map ref graph.edges;
-  inactive_terms=[];
-}
+module Solver = struct
+  type vertices = EdgeSet.t TermMap.t
+  type solution = {
+      mutable critical_terms: vertices;
+      mutable dependent_terms: vertices;
+    }
+  let init (graph:graph) =
+    let critical_terms =
+      List.fold_left (fun map (term, cons) ->
+          TermMap.update term
+            (function
+             |Some(edge_set) -> Some(EdgeSet.add {term=term;cons=cons;active=true} edge_set)
+             | None -> Some(EdgeSet.singleton {term=term;cons=cons;active=true}))
+            map
+        ) TermMap.empty graph.edges in
+    { critical_terms=critical_terms;
+      dependent_terms=TermMap.empty; }
 
-let term_equals a b = match a, b with
-  | {node=Some(t)}, {node = Some(u)} when t == u -> true
-  | {name=a;node=None}, {name=b;node=None} when a == b -> true
-  | _ -> false
-let term_c_equals a b =
-  match a, b with
-  | (Term {node=Some(t)}, Term {node=Some(u)}) when t == u -> true
-  | _ -> false
+  let show solution =
+    printf " [Solution] ----------------------------------------\n";
+    let print_terms color_triple x =
+      TermMap.bindings x
+      |> List.map (fun (t, e) -> EdgeSet.elements e)
+      |> List.concat
+      |> List.iter
+           (fun edge ->
+             printf "%s :: %s\n"
+               (as_rgb color_triple (sprintf "%20s" edge.term.name))
+               (Graph.cons_to_string edge.cons))
+    in
+    print_terms (1, 5, 2) solution.critical_terms;
+    print_terms (5, 3, 3) solution.dependent_terms
 
-let show (solution:solution) =
-  let rec loop = function
-    | {contents=(x, c)} :: xs ->
-       let color = match List.find_opt (term_equals x) solution.active_terms with
-         | None -> Color GREEN
-         | Some(t) -> Color WHITE in
-       printf "%20s :: %s\n"
-         (as_color color (sprintf "%20s" x.name))
-         (Graph.cons_to_string c);
-       loop xs
-    | [] -> () in
-  printf "%s" (as_rgb (5, 5, 5) " [Solution]\n");
-  loop (solution.active_edges |> List.sort compare)
+  let delete_term solution term =
+    {solution with critical_terms=TermMap.remove term solution.critical_terms}
 
-let active_constraints_for_term solution term =
-  let rec loop res = function
-    | [] -> res
-    | {contents=(t, c)} :: xs ->
-       let res1 = if t.name = term.name then c :: res else res in
-       loop res1 xs
-  in loop [] solution.active_edges
+  let defer_term solution term cons =
+    (* printf "\tdeferring %s\n" term.name; *)
+    {critical_terms=TermMap.remove term solution.critical_terms;
+     dependent_terms=TermMap.update term (function
+                         | Some(e) -> Some(EdgeSet.add {term=term;cons=cons;active=false} e)
+                         | None -> Some(EdgeSet.singleton {term=term;cons=cons;active=false}))
+                       solution.dependent_terms}
+  let defer_term_all solution term =
+    (* printf "\tdeferring_all %s\n" term.name; *)
+    let edges = TermMap.find term solution.critical_terms in
+    {critical_terms=TermMap.remove term solution.critical_terms;
+     dependent_terms=TermMap.update term (function
+                         | Some(e) -> Some(EdgeSet.union edges e)
+                         | None -> Some(edges)) solution.dependent_terms}
 
-let replace_term solution term constr =
-  (* TODO: use get_referring_constraints *)
-  let rec replace_c t = function
-    | Term c_term as x ->
-       if term_equals c_term term then constr
-       else x
-    | Type (n, params) -> Type (n, List.map (replace_c t) params)
-    | Call (a, b) -> Call(replace_c t a, List.map (replace_c t) b)
-    | Union cases -> Union (List.map (replace_c t) cases)
-    | x -> x in
-  let rec loop = function
-    | [] -> ()
-    | {contents=(t, c)} as box :: xs ->
-       box := (t, replace_c t c);
-       loop xs in
-  loop solution.active_edges
+  let substitute_term solution term cons =
+    printf "\tsubstutituing %s\n" term.name;
+    let sub_edge edge = {edge with cons=Edge.replace_term term cons edge.cons} in
+    {critical_terms=TermMap.map (EdgeSet.map sub_edge) solution.critical_terms;
+     dependent_terms=TermMap.map (EdgeSet.map sub_edge) solution.dependent_terms }
 
-let addTerm solution name t =
-  let rec nameloop name i =
-    let indexedname = match i with
-      | 0 -> name
-      | n -> name ^ string_of_int n in
-    match StringMap.find_opt indexedname solution.names with
-    | Some(existing) -> nameloop name (i + 1)
-    | None -> indexedname in
-  let name = nameloop name 0 in
-  let term = {name=name;node=None} in
-  solution.names <- StringMap.add name term solution.names;
-  solution.active_terms <- term :: solution.active_terms;
-  term
+  let add_constraint_t cc term cons =
+    TermMap.update term (function
+        | Some(e) -> Some(EdgeSet.add {term=term;cons=cons;active=true} e)
+        | None -> Some(EdgeSet.singleton {term=term;cons=cons;active=true})) cc
 
-let remove_constraint solution term cons =
-  (* printf "removing constraint %s %s\n" (term.name) (Graph.cons_to_string cons); *)
-  let c, d = List.partition (fun {contents=(t, c)} -> (term_equals t term) && cons = c) solution.active_edges in
-  solution.active_edges <- d
+  let add_constraints solution constraints =
+    let new_edges = List.fold_left (fun cc (t, c) -> add_constraint_t cc t c) solution.critical_terms constraints in
+    {solution with critical_terms=new_edges}
 
-let remove_term solution term =
-  (* printf "Removing Term %s\n" term.name; *)
-  let a, b = List.partition (fun t -> not (term_equals t term)) solution.active_terms in
-  solution.active_terms <- a;
-  solution.inactive_terms <- solution.inactive_terms @ b;
+  let rec add_term solution name index =
+    let fullname = match index with | 0 -> name | n -> sprintf "%s.%d" name index in
+    let term = {name=fullname;node=None} in
+    match TermMap.find_opt term solution.critical_terms with
+    | Some(t) -> add_term solution name (index + 1)
+    | None ->
+       match TermMap.find_opt term solution.dependent_terms with
+       | Some(t) -> add_term solution name (index + 1)
+       | None ->
+          solution.critical_terms <- TermMap.add term EdgeSet.empty solution.critical_terms;
+          term
 
-module IntMap = Map.Make(Int32)
+  let rec instantiate instances solution = function
+    | Free f ->
+       (match IntMap.find_opt (Int32.of_int f) !instances with
+        | Some(term) -> Term term
+        | None ->
+           let term = add_term solution "τ" 0 in
+           instances := IntMap.add (Int32.of_int f) term !instances;
+           Term term)
+    | Type (name, params) -> Type(name, List.map (instantiate instances solution) params)
+    | n -> n
 
-let rec instantiate solution instances = function
-  | Free i ->
-     let i = Int32.of_int i in
-     (match IntMap.find_opt i (!instances) with
-      | Some(found) -> found
-      | None ->
-         let term = Term (addTerm solution "τ" Empty) in
-         instances := IntMap.add i term (!instances);
-         term)
-  | n -> n
+  type unificationStatus = | Success of (term * cons) list | Fail of string
 
-type unifyResult =
-  (* successfully unified, here are better constraints *)
-  | Success of (term * cons) list
-  (* no solutions available *)
-  | Fail of string
-  (* Needs more info to unify *)
-  | Defer
+  let combine_unification a b = match a, b with
+    | Success alist, Success blist -> Success (alist @ blist)
+    | Fail a, Fail b -> Fail (a ^ ", " ^ b)
+    | Fail a, _ -> Fail a
+    | _, Fail b -> Fail b
 
-let rec unify solution term left right =
-  (printf "\027[38;5;96m\tUnifying %s: %s == %s\027[0m\n"
-     term.name
-     (Graph.cons_to_string left)
-     (Graph.cons_to_string right)
-  );
-  match left, right with
-  | (_, Free i) -> Fail "Unifying a free variable"
-  | (Free i, _) -> Fail "Unifying a free variable"
-  | (Term t, Term u) ->
-     if t.name = u.name then
-       Success []
-     else
-       Success [(t, Term u)]
-  | (Type _, Term t) -> unify solution term right left
-  | (Term t, (Type _ as y)) ->
-     solution.active_edges <- ref (t, y) :: solution.active_edges;
-     solution.active_terms <- t :: solution.active_terms;
-     Defer
-  | (Term t, (Union m as u)) ->
-     solution.active_edges <- ref (t, u) :: solution.active_edges;
-     solution.active_terms <- t :: solution.active_terms;
-     Defer
-  | (Call (a, a_args), Call (b, b_args)) ->
-     (* printf "unifying 2 calls....\n"; *)
-     Defer
-  | (_, Call _) -> unify solution term right left
-  | (Call (Type ("Func", params), args), Term t) ->
-     let instances = ref IntMap.empty in
-     let params = List.map (instantiate solution instances) params in
-     (match List.rev params with
-     | [] -> Fail "parameter count mismatch"
-     | retval :: rparams ->
-        let rs = List.map2 (unify solution term) rparams (List.rev args) in
-        let r2 = unify solution term retval (Term t) in
-        Success)
-  | (Call (Union cases, args), other) ->
-     let try_case case = unify solution term (Call (case, args)) other in
-     let successes = List.filter (fun c -> try_case c = Success) cases in
-     (match successes with
-      | [] -> Defer
-      | [item] -> Defer
-      | _ -> Defer)
-  | (Call _ as c , other) ->
-     unify solution term (Term term) other;
-     solution.active_edges <- ref (term, c) :: solution.active_edges;
-     Defer
-  | (Type (a, ap), Type (b, bp)) ->
-     if a <> b then
-       Fail (sprintf "Type mismatch: %s <-> %s\n" a b)
-     else
-       let result = List.map2 (unify solution term) ap bp in
-       List.fold_left (
-           fun a b ->
-           match a, b with
-           | Success, Success -> Success
-           | Fail s, _ -> Fail s
-           | _, Fail s -> Fail s
-           | _ -> Defer) Success result
-  | _ ->
-     show solution;
-     printf "Unifying\n";
-     printf "    %s\n" (Graph.cons_to_string left);
-     printf "    %s\n" (Graph.cons_to_string right);
-     failwith "Unhandled Unification\n"
+  let rec unify solution a b =
+    match a, b with
+    | Type(x, xp), Type(y, yp) ->
+       if x != y then
+         Fail ("Type Mismatch " ^ x ^ ", " ^ y)
+       else
+         let results = List.map2 (unify solution) xp yp in
+         List.fold_left combine_unification (Success []) results
+    | Term x, Term y -> Success [x, Term y]
+    | Free f, _ -> Fail (sprintf "free variable %d" f)
+    | _, Free f -> Fail (sprintf "free variable %d" f)
+    | (Type _ as y), Term x -> Success [x, y]
+    | Term x, (Type _ as y) -> Success [x, y]
+    | _, Term x -> unify solution b a
+    | Term x, (Call(Type("Func", params), args)) ->
+       let instances = ref IntMap.empty in
+       let params = List.map (instantiate instances solution) params in
+       let params_a = Array.of_list params in
+       let args_a = Array.of_list args in
+       if Array.length args_a + 1 != Array.length params_a then
+         (printf "%d-%d\n" (Array.length args_a + 1) (Array.length params_a);
+          Fail (sprintf
+                  "parameter count mismatch (%s, %s)\n"
+                  (Graph.cons_to_string a)
+                  (Graph.cons_to_string b)
+         ))
+       else
+         let len = Array.length args_a in
+         let param_results = Array.map2 (unify solution) args_a (Array.sub params_a 0 len) in
+         let result = unify solution (Term x) (Array.get params_a len) in
+         Array.fold_left combine_unification result param_results
+    | _ -> Fail (sprintf
+                   "unhandled unification:\n\t%s\n\t%s"
+                   (Graph.cons_to_string a) (Graph.cons_to_string b))
 
-(* At each step in the solution, we record progress made.
- * If no progress, the solution is complete *)
-type solveStepResult = | Progress | NoProgress
+  let unify_all solution constraints =
+    (match constraints with
+     | cons :: rest ->
+        let (cresult, results) =
+          List.fold_left
+            (fun (cons_init, res) cc -> (cons_init, combine_unification res (unify solution cons cc)))
+            (cons, Success [])
+            rest in
+        results
+     | _ -> failwith "unification shape error")
 
-let rec solve graph =
-  let solution = createSolutionFromGraph graph in
-  Graph.show graph;
-  show solution;
-  let rec run_step i =
-    if i > 1000 then
-      printf "Aborting Solution\n"
-    else
-      let stepresults = List.map (runStep solution) solution.active_terms in
-      let result =
-        List.fold_left (fun a b ->
-          match a, b with
-          | NoProgress , NoProgress -> NoProgress
-          | _ -> Progress) NoProgress stepresults in
-      (match result with
-       | Progress -> run_step (i + 1)
-       | NoProgress -> printf "Solution finished in %d steps\n" i) in
-  run_step 0;
-  solution;
+  let step_term solution term constraints =
+    (* printf "Step: %s\n" term.name;
+     * List.iter (fun c -> printf "\t%s\n" (Graph.cons_to_string c)) constraints;
+     * show solution; *)
+    show solution;
+    printf "Step: %s\n" term.name;
+    (match constraints with
+     | [] ->
+        delete_term solution term
+     | [Type _ as y] ->
+        let s = defer_term solution term y in substitute_term s term y
+     | [Term y] -> let s = defer_term solution term (Term y) in substitute_term s term (Term y)
+     | [Union y] -> let s = defer_term solution term (Union y) in substitute_term s term (Union y)
+     | [ Call(Type("Func", params), args) as y ] ->
+        let sol = delete_term solution term in
+        (match unify sol (Term term) y with
+         | Fail s -> printf "Error: %s" (as_color (Bold RED) s); sol
+         | Success list -> add_constraints sol list;)
+     | [ Call(Union cases, args) as y ] ->
+        let sol = delete_term solution term in
+        let status = List.map (fun c -> unify sol (Term term) (Call (c, args))) cases in
+        (* status |> List.iteri (fun i -> function
+         *               | Success list ->
+         *                  printf "[%d] %s\n" i (
+         *                      list
+         *                      |> List.map (fun (tc, cc) ->
+         *                             sprintf "\t%s::%s"
+         *                               tc.name
+         *                               (Graph.cons_to_string cc))
+         *                      |> String.concat "\n")
+         *               | Fail s -> printf "[%d] Fail %s\n" i s); *)
+        (match List.partition (function | Success x -> true | _ -> false) status with
+         | [Success x], _ -> add_constraints sol x
+         | _ -> printf "skipping\n"; solution)
+     (* let sol = delete_term solution term in
+      * (match unify sol (Term term) y with
+      *  | Fail s -> printf "Error: %s" (as_color (Bold RED) s); sol
+      *  | Success list -> add_constraints sol list;) *)
+     | [ _ ] -> printf "skipping\n"; solution
+     | x :: xs ->
+        match unify_all solution (x :: xs) with
+        | Success list -> let solution = defer_term_all solution term in add_constraints solution list;
+        | Fail s -> printf "Error: %s" (as_color (Bold RED) s); solution
+    )
 
-and runStep solution term =
-  (* printf "Inspecting term: %s\n" (as_rgb (5, 3, 2) term.name); *)
-  match active_constraints_for_term solution term with
-  | [] ->
-     (* printf "\t\tNo constraints\n" *)
-     remove_term solution term; Progress
-  | [Term t] ->
-     (* a single term constraint t -> u can be substituted into all references *)
-     remove_term solution term;
-     replace_term solution term (Term t); Progress
-  | [Type (t, params)] ->
-     (* a single type constraint be subtituted into all references *)
-     remove_term solution term;
-     replace_term solution term (Type (t, params)); Progress
-  | [Union cases] ->
-     (* a single type constraint be subtituted into all references *)
-     remove_term solution term;
-     replace_term solution term (Union cases); Progress
-  | cons ->
-     (* If we have N type / term constraints for a term, we can reduce the set
-      * and replace with N-1 terms.
-      * TODO -- we can remove the term from the active list completely if we also substitute
-      * in the final unification result into all the replacement terms *)
-     List.iter (remove_constraint solution term) cons; flush stdout;
-     (let loop c1 c2 =
-        (* (printf "\t %s: %s <-> %s\n"
-         *    term.name
-         *    (Graph.cons_to_string c1)
-         *    (Graph.cons_to_string c2)); *)
-        (match unify solution term c1 c2 with | Defer -> c2 | Success -> c2 | Fail s -> c2) in
-      match List.fold_left loop (Term term) cons with | _ -> NoProgress);
+  let step sol =
+    let folder term edge_set solution =
+      let edge_set = TermMap.find term solution.critical_terms in
+      step_term solution term (edge_set |> EdgeSet.elements |> List.map (fun e -> e.cons))
+    in TermMap.fold folder sol.critical_terms sol
+
+  let fix solution =
+    let rec pure_type = function
+      | Type(n, p) -> List.for_all pure_type p
+      | _ -> false in
+    let types =
+      solution.dependent_terms
+      |> TermMap.bindings
+      |> List.map (fun (tc, edges) -> EdgeSet.elements edges)
+      |> List.concat
+      |> List.filter (function | {cons=t} when pure_type t -> true | _ -> false)
+    in
+    List.fold_left (fun sol {term=t;cons=c} -> substitute_term sol t c) solution types
+
+  let rec solve solution =
+    let next_sol = step solution in
+    solution |> step |> step |> step |> step  |> step |> step |> fix
 end
+
+(* let () =
+ *   let type1 =
+ *     printf "[Type Graph Test]  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
+ *     let graph = Graph.create () in
+ *     let t1 = Graph.addTerm graph "x" Empty in
+ *     let r0 = Graph.addTerm graph "r" Empty in
+ *     let i0 = Graph.addTerm graph "i" Empty in
+ *     Graph.addCons graph i0 (Type ("Int32", [])) ;
+ *     Graph.addCons graph i0 (Term t1);
+ *     Graph.addCons graph r0 (Call (Type ("Func", [Free 100; Free 100]), [Term t1]));
+ *     Graph.show graph;
+ *     graph
+ *     |> Solver.init
+ *     |> Solver.solve
+ *     |> Solver.show
+ *   in
+ *   let type2 =
+ *     printf "[Type Graph Test 2] ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
+ *   in exit 0 *)
