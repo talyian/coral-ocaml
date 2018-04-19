@@ -236,8 +236,6 @@ let jit coralModule =
   Llvm_passmgr_builder.populate_module_pass_manager module_passmgr passmgrbuilder;
   ignore (Llvm.PassManager.run_module llmodule module_passmgr);
 
-  Llvm.string_of_llmodule llmodule |> print_string;
-  flush stdout;
   try
     ignore (Llvm_executionengine.initialize());
     let llengine = Llvm_executionengine.create llmodule in
@@ -247,7 +245,4 @@ let jit coralModule =
   with exc->
     Printexc.to_string exc |> print_string
 
-let run x =
-  Printf.printf "Jitting...\n";
-  flush stdout;
-  jit x
+let run x = jit x

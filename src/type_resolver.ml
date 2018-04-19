@@ -3,6 +3,14 @@
 open Ast
 open Type_graph
 
+let rec type_to_constraint = function
+  | Ast.Free -> failwith "unhandled free term"
+  | Ast.Type "Tuple" -> Type_graph.Type ("Void", [])                         
+  | Ast.Type s -> Type_graph.Type (s, [])
+  | Ast.Parameterized ("Tuple", []) -> Type_graph.Type ("Void", [])
+  | Ast.Parameterized (s, p) -> Type_graph.Type (s, List.map type_to_constraint p)
+  | Ast.Dotted items -> failwith "unhandled dotted type"
+                             
 let rec createGraph (g:graph) node =
   (* Printf.printf "Node: ";
    * (Ast.show node);
@@ -20,11 +28,14 @@ let rec createGraph (g:graph) node =
      let t = Graph.addTerm g name f in
      let runp (p:defNode) = let pterm = Graph.addTerm g p.name (Def p) in Term pterm in
      let ttparams = List.map runp params in
-     let body_term = createGraph g body in
-     (match body_term with
-     | None -> ()
-     | Some(bt) -> Graph.addCons g t (Type ("Func", ttparams @ [Term bt]))
-     );
+     let ret_term = (match body with
+      | Empty -> Graph.addOptionalTerm g (t.name ^ ".ret") None
+      | _ -> match createGraph g body with
+             | None -> Graph.addOptionalTerm g (t.name ^ ".ret") None
+             | Some(bt) -> bt
+                    ) in
+     Graph.addCons g t (Type ("Func", ttparams @ [Term ret_term]));
+     Graph.addCons g ret_term (type_to_constraint ret_type);
      Some t
   | If (cond, i, e) ->
      let cond_term = createGraph g cond in
@@ -87,7 +98,9 @@ let rec createGraph (g:graph) node =
                       match createGraph g x with
                       | Some(n) -> Term n :: out
                       | None -> failwith "invalid type term in tuple") [] list) in
-     let cons = Type ("Tuple", terms) in
+     let cons = (match terms with
+                 | [] -> Type("Void", [])
+                 | terms -> Type ("Tuple", terms)) in
      let tuple_term = Graph.addTerm g "tuple" t in
      Graph.addCons g tuple_term cons; Some tuple_term
   | Var v ->
@@ -132,10 +145,18 @@ let applySolution (solution:Solver.solution) =
      | Func func as f ->
         (* Printf.printf "func name %s returns %s\n" func.name (type_to_string cons_type); *)
         (match cons_type with
-        | Parameterized ("Func", cons_params) ->
-           let (ret :: ptypes) = List.rev cons_params in
-           let newparams = List.map2 applyType ptypes (List.rev func.params |> List.map (fun v -> Def v)) in
-           func.ret_type <- ret; f
+         | Parameterized ("Func", cons_params) ->
+            (match List.rev cons_params with
+             | [] -> failwith "???"
+             | ret :: ptypes ->
+                let newparams =
+                  List.map2
+                    applyType
+                    ptypes
+                    (List.rev func.params |> List.map (fun v -> Def v)) in
+                func.ret_type <- ret;
+                ignore newparams;
+                f)
         | _ -> f)
      | Def v as d ->
         (* Printf.printf "def (%s) is typed %s\n" v.name (type_to_string cons_type); *)
@@ -161,17 +182,13 @@ let applySolution (solution:Solver.solution) =
   |> TermMap.bindings
   |> List.map (fun (t, edges) -> EdgeSet.elements edges)
   |> List.concat
-  |> List.iter (fun e -> apply e);
-  0
+  |> List.iter (fun e -> apply e)
 
 let run m =
   let graph = Graph.create () in
   let term = createGraph graph m in
   ignore term;
   let solution = Solver.init graph in
-  Solver.show solution;
   let solution = Solver.solve solution in
-  Solver.show solution;
   applySolution solution;
-  Ast.show m;
   m

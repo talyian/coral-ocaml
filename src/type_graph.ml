@@ -87,7 +87,7 @@ module Graph = struct
          loop xs in loop graph.edges
 
   let create () = { names=StringMap.empty; terms=[]; edges=[] }
-  let addTerm (graph:graph) name astnode =
+  let addOptionalTerm (graph:graph) name astnode =
     let indexedname = function
       | 0 -> name
       | n -> name ^ "." ^ string_of_int n in
@@ -97,10 +97,11 @@ module Graph = struct
       | Some(existing) -> tryindex (i + 1)
       | None -> iname in
     let name = tryindex 0 in
-    let term = {name=name;node=Some(astnode)} in
+    let term = {name=name;node=astnode} in
     graph.terms <- term::graph.terms;
     graph.names <- StringMap.add name term graph.names;
     term
+  let addTerm graph name node = addOptionalTerm graph name (Some node)
 
   let addCons (graph:graph) term cons = graph.edges <- (term, cons) :: graph.edges
 
@@ -169,7 +170,7 @@ module Solver = struct
                          | None -> Some(edges)) solution.dependent_terms}
 
   let substitute_term solution term cons =
-    printf "\tsubstutituing %s\n" term.name;
+    (* printf "\tsubstutituing %s\n" term.name; *)
     let sub_edge edge = {edge with cons=Edge.replace_term term cons edge.cons} in
     {critical_terms=TermMap.map (EdgeSet.map sub_edge) solution.critical_terms;
      dependent_terms=TermMap.map (EdgeSet.map sub_edge) solution.dependent_terms }
@@ -218,35 +219,49 @@ module Solver = struct
     match a, b with
     | Type(x, xp), Type(y, yp) ->
        if x != y then
-         Fail ("Type Mismatch " ^ x ^ ", " ^ y)
+         Fail ("Type Mismatch " ^ (Graph.cons_to_string a) ^ ", " ^ (Graph.cons_to_string b))
        else
          let results = List.map2 (unify solution) xp yp in
          List.fold_left combine_unification (Success []) results
-    | Term x, Term y -> Success [x, Term y]
+    | Term x, Term y ->
+       if x.name = y.name then Success [] else Success [x, Term y]
     | Free f, _ -> Fail (sprintf "free variable %d" f)
     | _, Free f -> Fail (sprintf "free variable %d" f)
     | (Type _ as y), Term x -> Success [x, y]
     | Term x, (Type _ as y) -> Success [x, y]
     | _, Term x -> unify solution b a
-    | Term x, (Call(Type("Func", params), args)) ->
+    | (Term _ as lhs, (Call(Type("Func", params), args)))
+    | (Type _ as lhs, (Call(Type("Func", params), args))) ->
        let instances = ref IntMap.empty in
        let params = List.map (instantiate instances solution) params in
        let params_a = Array.of_list params in
        let args_a = Array.of_list args in
-       if Array.length args_a + 1 != Array.length params_a then
-         (printf "%d-%d\n" (Array.length args_a + 1) (Array.length params_a);
-          Fail (sprintf
-                  "parameter count mismatch (%s, %s)\n"
-                  (Graph.cons_to_string a)
-                  (Graph.cons_to_string b)
-         ))
+       if List.exists (function | Term {name="..."} -> true | _ -> false) params then
+         let len = Array.length params_a in
+         let res = Array.get params_a (len - 1) in
+         unify solution lhs res
+       else if Array.length args_a + 1 != Array.length params_a then
+         Fail (sprintf
+                 "parameter count mismatch (%s, %s)\n"
+                 (Graph.cons_to_string a)
+                 (Graph.cons_to_string b))
        else
          let len = Array.length args_a in
          let param_results = Array.map2 (unify solution) args_a (Array.sub params_a 0 len) in
-         let result = unify solution (Term x) (Array.get params_a len) in
+         let result = unify solution lhs (Array.get params_a len) in
          Array.fold_left combine_unification result param_results
+    (* | Term x, Union cases -> *)
+    | (Term _ as lhs, Union cases) | (Type _ as lhs, Union cases) ->
+       let case_results = List.map (unify solution lhs) cases
+       in (
+         match List.find_opt (function | Fail s -> true | _ -> false) case_results with
+         | Some f -> f
+         | _ -> 
+            match List.find_opt (function | Success (a :: b:: c) -> true | _ ->false) case_results with
+            | Some x -> Fail "multiple constraints out of union"
+            | _ -> Success [])
     | _ -> Fail (sprintf
-                   "unhandled unification:\n\t%s\n\t%s"
+                   "unhandled unification:\n\t%s\n\t%s\n"
                    (Graph.cons_to_string a) (Graph.cons_to_string b))
 
   let unify_all solution constraints =
@@ -262,7 +277,7 @@ module Solver = struct
 
   let step_union solution =
     let replace_edge e =
-      printf "\t%s:: %s\n" e.term.name (Graph.cons_to_string e.cons);
+      (* printf "\t%s:: %s\n" e.term.name (Graph.cons_to_string e.cons); *)
       let rec replace_cons = function
         | Union [Type (a, ax); Type(b, bx)] when (a = b && ax = bx) -> Type(a, ax)
         | Type(a, p) -> Type(a, List.map replace_cons p)
@@ -276,8 +291,8 @@ module Solver = struct
 
 
   let step_term solution term constraints =
-    show solution;
-    printf "Step: %s\n" term.name;
+    (* show solution;
+     * printf "Step: %s\n" term.name; *)
     (match constraints with
      | [] -> delete_term solution term
      | [Type _ as y] -> let s = defer_term solution term y in substitute_term s term y
@@ -286,19 +301,19 @@ module Solver = struct
      | [ Call(Type("Func", params), args) as y ] ->
         let sol = delete_term solution term in
         (match unify sol (Term term) y with
-         | Fail s -> printf "Error: %s" (as_color (Bold RED) s); sol
+         | Fail s -> printf "Error: %s\n" (as_color (Bold RED) s); sol
          | Success list -> add_constraints sol list;)
-     | [ Call(Union cases, args) as y ] ->
+     | [ Call(Union cases, args) ] ->
         let sol = delete_term solution term in
         let status = List.map (fun c -> unify sol (Term term) (Call (c, args))) cases in
         (match List.partition (function | Success x -> true | _ -> false) status with
          | [Success x], _ -> add_constraints sol x
-         | _ -> printf "skipping\n"; solution)
-     | [ _ ] -> printf "skipping\n"; solution
+         | _ -> solution)
+     | [ _ ] -> solution
      | x :: xs ->
         match unify_all solution (x :: xs) with
         | Success list -> let solution = defer_term_all solution term in add_constraints solution list;
-        | Fail s -> printf "Error: %s" (as_color (Bold RED) s); solution
+        | Fail s -> printf "Error: %s\n" (as_color (Bold RED) s); solution
     )
 
   let step sol =
