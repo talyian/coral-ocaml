@@ -1,9 +1,10 @@
 open CoralModule
 let tee f x = f x; x
+
 let () =
-  "samples/core/hello.coral"  
-  |> parse_file
-  |> run
+  run @@ parse_file "samples/core/hello.coral";
+  run @@ parse_file "samples/core/factorial.coral";
+  show @@ parse_file "samples/core/collatz.coral";
   (* let parse_test filename = parse_file filename |> ignore in
    * let suite = "Tests" >::: [
    *   "Core" >::: [

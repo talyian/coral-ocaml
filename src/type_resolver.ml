@@ -5,12 +5,12 @@ open Type_graph
 
 let rec type_to_constraint = function
   | Ast.Free -> failwith "unhandled free term"
-  | Ast.Type "Tuple" -> Type_graph.Type ("Void", [])                         
+  | Ast.Type "Tuple" -> Type_graph.Type ("Void", [])
   | Ast.Type s -> Type_graph.Type (s, [])
   | Ast.Parameterized ("Tuple", []) -> Type_graph.Type ("Void", [])
   | Ast.Parameterized (s, p) -> Type_graph.Type (s, List.map type_to_constraint p)
   | Ast.Dotted items -> failwith "unhandled dotted type"
-                             
+
 let rec createGraph (g:graph) node =
   (* Printf.printf "Node: ";
    * (Ast.show node);
@@ -35,7 +35,9 @@ let rec createGraph (g:graph) node =
              | Some(bt) -> bt
                     ) in
      Graph.addCons g t (Type ("Func", ttparams @ [Term ret_term]));
-     Graph.addCons g ret_term (type_to_constraint ret_type);
+     (match ret_type with
+      | Type "" -> ()
+      | rt -> Graph.addCons g ret_term (type_to_constraint rt));
      Some t
   | If (cond, i, e) ->
      let cond_term = createGraph g cond in
@@ -47,6 +49,8 @@ let rec createGraph (g:graph) node =
          Graph.addCons g term (Union [Term it; Term et]);
          ignore cond_term;
          Some term
+      | (None, Some(x))
+      | (Some(x), None) -> Graph.addCons g term (Term x); Some term
       | _ -> failwith "invalid terms in if type analysis")
   | Let (var, expr) as x ->
      let expr_term = createGraph g expr in

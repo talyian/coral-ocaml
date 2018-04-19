@@ -218,7 +218,7 @@ module Solver = struct
   let rec unify solution a b =
     match a, b with
     | Type(x, xp), Type(y, yp) ->
-       if x != y then
+       if x <> y then
          Fail ("Type Mismatch " ^ (Graph.cons_to_string a) ^ ", " ^ (Graph.cons_to_string b))
        else
          let results = List.map2 (unify solution) xp yp in
@@ -256,7 +256,7 @@ module Solver = struct
        in (
          match List.find_opt (function | Fail s -> true | _ -> false) case_results with
          | Some f -> f
-         | _ -> 
+         | _ ->
             match List.find_opt (function | Success (a :: b:: c) -> true | _ ->false) case_results with
             | Some x -> Fail "multiple constraints out of union"
             | _ -> Success [])
