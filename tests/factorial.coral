@@ -1,0 +1,8 @@
+func factorial(n):
+  if n < 2 { 1 } else { n * factorial(n - 1) }
+
+func factorial_tail(n, v=1):
+  if n < 2 { v } else { factorial_tail(n - 1, v * n) }
+
+func factorial_fold(n):
+  fold ((*), 1, range (1, n))

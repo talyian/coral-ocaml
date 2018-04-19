@@ -61,7 +61,7 @@ expr
   | e=FLOAT { FloatLiteral e }
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
   | e=STRING { StringLiteral e }
-  | lhs=expr op=OPERATOR rhs=expr { Binop (op, lhs, rhs) }
+  | lhs=expr op=operator rhs=expr { Binop (op, lhs, rhs) }
   | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }
   | callee=expr LPAREN RPAREN { Call(callee, []) }
   | callee=expr arg=expr { Call(callee, [arg]) }
@@ -70,6 +70,10 @@ expr
 exprlist
   : e=expr { [e] }
   | x=exprlist COMMA e=expr { x@[e] }
+
+operator
+  : e=OPERATOR { e }
+  | EQ { "=" }
 
 param
   : e=IDENTIFIER { {name=e; defType=None} }

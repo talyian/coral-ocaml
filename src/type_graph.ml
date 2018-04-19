@@ -61,31 +61,6 @@ module Edge = struct
 end
 
 module Graph = struct
-  let create () = { names=StringMap.empty; terms=[]; edges=[] }
-  let addTerm (graph:graph) name astnode =
-    let indexedname = function
-      | 0 -> name
-      | n -> name ^ "." ^ string_of_int n in
-    let rec tryindex i =
-      let iname = indexedname i in
-      match StringMap.find_opt iname graph.names with
-      | Some(existing) -> tryindex (i + 1)
-      | None -> iname in
-    let name = tryindex 0 in
-    let term = {name=name;node=Some(astnode)} in
-    graph.terms <- term::graph.terms;
-    graph.names <- StringMap.add name term graph.names;
-    term
-
-  let findTermByExpr graph astnode =
-    try
-      List.find (function | {node=Some n} when n = astnode -> true | _ -> false) graph.terms
-    with exc ->
-      Printf.eprintf "Type graph: failed to find referred node %s\n" (nodeName astnode);
-      Ast.show astnode;
-      raise exc
-
-  let addCons (graph:graph) term cons = graph.edges <- (term, cons) :: graph.edges
 
   let rec cons_to_string = function
     | Term t -> as_rgb (5, 2, 3)  t.name
@@ -106,8 +81,40 @@ module Graph = struct
     let rec loop = function
       | [] -> ()
       | (t, c) :: xs ->
-         Printf.printf "%20s :: %-20s\n" ((Printf.sprintf "%20s" t.name)) (cons_to_string c);
+         Printf.printf "%20s :: %-20s\n"
+           (Printf.sprintf "%20s" t.name)
+           (cons_to_string c);
          loop xs in loop graph.edges
+
+  let create () = { names=StringMap.empty; terms=[]; edges=[] }
+  let addTerm (graph:graph) name astnode =
+    let indexedname = function
+      | 0 -> name
+      | n -> name ^ "." ^ string_of_int n in
+    let rec tryindex i =
+      let iname = indexedname i in
+      match StringMap.find_opt iname graph.names with
+      | Some(existing) -> tryindex (i + 1)
+      | None -> iname in
+    let name = tryindex 0 in
+    let term = {name=name;node=Some(astnode)} in
+    graph.terms <- term::graph.terms;
+    graph.names <- StringMap.add name term graph.names;
+    term
+
+  let addCons (graph:graph) term cons = graph.edges <- (term, cons) :: graph.edges
+
+  let findTermByExpr graph astnode =
+    match List.find_opt (function
+              | {node=Some n} when n == astnode -> true
+              | {node=Some(Def v)} ->
+                 (match astnode with
+                  | Def u -> u = v
+                  | _ -> false)
+              | _ -> false) graph.terms with
+    | None -> (show graph; failwith "did not find expression")
+    | Some(e) -> e
+
 end
 
 module Solver = struct
@@ -253,17 +260,27 @@ module Solver = struct
         results
      | _ -> failwith "unification shape error")
 
+  let step_union solution =
+    let replace_edge e =
+      printf "\t%s:: %s\n" e.term.name (Graph.cons_to_string e.cons);
+      let rec replace_cons = function
+        | Union [Type (a, ax); Type(b, bx)] when (a = b && ax = bx) -> Type(a, ax)
+        | Type(a, p) -> Type(a, List.map replace_cons p)
+        | Call(x, ys) -> Call(replace_cons x, List.map replace_cons ys)
+        | n -> n in
+      {e with cons=replace_cons e.cons}
+    in
+    let rep = TermMap.map (fun edges -> EdgeSet.map replace_edge edges) in
+    {critical_terms= rep solution.critical_terms;
+     dependent_terms= rep solution.dependent_terms}
+
+
   let step_term solution term constraints =
-    (* printf "Step: %s\n" term.name;
-     * List.iter (fun c -> printf "\t%s\n" (Graph.cons_to_string c)) constraints;
-     * show solution; *)
     show solution;
     printf "Step: %s\n" term.name;
     (match constraints with
-     | [] ->
-        delete_term solution term
-     | [Type _ as y] ->
-        let s = defer_term solution term y in substitute_term s term y
+     | [] -> delete_term solution term
+     | [Type _ as y] -> let s = defer_term solution term y in substitute_term s term y
      | [Term y] -> let s = defer_term solution term (Term y) in substitute_term s term (Term y)
      | [Union y] -> let s = defer_term solution term (Union y) in substitute_term s term (Union y)
      | [ Call(Type("Func", params), args) as y ] ->
@@ -274,23 +291,9 @@ module Solver = struct
      | [ Call(Union cases, args) as y ] ->
         let sol = delete_term solution term in
         let status = List.map (fun c -> unify sol (Term term) (Call (c, args))) cases in
-        (* status |> List.iteri (fun i -> function
-         *               | Success list ->
-         *                  printf "[%d] %s\n" i (
-         *                      list
-         *                      |> List.map (fun (tc, cc) ->
-         *                             sprintf "\t%s::%s"
-         *                               tc.name
-         *                               (Graph.cons_to_string cc))
-         *                      |> String.concat "\n")
-         *               | Fail s -> printf "[%d] Fail %s\n" i s); *)
         (match List.partition (function | Success x -> true | _ -> false) status with
          | [Success x], _ -> add_constraints sol x
          | _ -> printf "skipping\n"; solution)
-     (* let sol = delete_term solution term in
-      * (match unify sol (Term term) y with
-      *  | Fail s -> printf "Error: %s" (as_color (Bold RED) s); sol
-      *  | Success list -> add_constraints sol list;) *)
      | [ _ ] -> printf "skipping\n"; solution
      | x :: xs ->
         match unify_all solution (x :: xs) with
@@ -299,6 +302,7 @@ module Solver = struct
     )
 
   let step sol =
+    let sol = step_union sol in
     let folder term edge_set solution =
       let edge_set = TermMap.find term solution.critical_terms in
       step_term solution term (edge_set |> EdgeSet.elements |> List.map (fun e -> e.cons))
@@ -318,8 +322,8 @@ module Solver = struct
     List.fold_left (fun sol {term=t;cons=c} -> substitute_term sol t c) solution types
 
   let rec solve solution =
-    let next_sol = step solution in
-    solution |> step |> step |> step |> step  |> step |> step |> fix
+    solution
+    |> step |> step |> step |> step  |> step |> step |> fix |> step |> step |> fix
 end
 
 (* let () =

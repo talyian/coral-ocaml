@@ -1,0 +1,24 @@
+type vector3[T] = {x: T, y: T; z:T}
+
+func lengthSquared (v:vector3):
+  v.x * v.x + v.y * v.y + v.z * v.z
+
+func length(v):
+  sqrt (lengthSquared v)
+
+func (+) (v:vector3, u:vector3):
+  vector3(v.x + u.x, v.y + u.y, v.z + u.z)
+
+func (-) (v:vector3, u:vector3):
+  vector3(v.x - u.x, v.y - u.y, v.z - u.z)
+
+func (*) (v:vector3[T], u:T):
+  vector3(v.x * u, v.y * u, v.z * u)
+
+func (*) (u:T, v:vector3[T]):
+  vector3(v.x * u, v.y * u, v.z * u)
+
+type vector3d = vector3[Float64]
+type vector3f = vector3[Float32]
+type vector3i = vector3[Int32]
+type vector3b = vector3[Int8]

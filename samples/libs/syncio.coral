@@ -1,0 +1,50 @@
+# ctypes
+type IntSize = Int64
+type Cstr = Str
+func strlen: IntSize(s: Cstr)
+type FilePtr = Ptr
+
+
+# unixio
+type FileHandle = Int32
+
+func open: FileHandle (path: Cstr, options: Int32)
+func write: IntSize (fd: FileHandle, buf: Ptr[Int8], count: IntSize)
+func read: IntSize  (fd: FileHandle, buf: Ptr[Int8], count: IntSize)
+
+# cstdio
+func printf: Void(fmt: Cstr, ...)
+
+
+type FdStream = {
+  fd: FileHandle
+}
+func FdStream.openRead(path: CStr):
+  open(path, 0)
+func read(stream: FdStream, buf, len):
+  let bytes_read = read(stream.fd, buf, len)
+  buf.slice(0, bytes_read)
+
+
+type BufferedStream[Stream] = {
+  base: Stream,
+  buffer: [Int8],
+  position: Int32,
+  length: Int32
+}
+func BufferedStream.new(base, len):
+  BufferedStream(base, [Int8 * len]
+func read(stream: BufferedStream[T], len):
+  stream.base.read(stream.buffer, len)
+func readline(stream: BufferedStream[T], len):
+  stream.base.
+
+let _stdbuflen = 1024
+let stdin = BufferedStream.new(FdStream(0), _stdbuflen)
+let stdout = BufferedStream.new(FdStream(1), _stdbuflen)
+let stderr = BufferedStream.new(FdStream(2), _stdbuflen)
+
+## Example Usages
+let file = BufferedStream.open("/etc/passwd")
+file.readAll()
+file.readLines() |> iteri ("%d: %s".printf)

@@ -4,3 +4,4 @@ B _build/src
 PKG llvm
 PKG foreign
 PKG ctypes
+PKG oUnit

@@ -243,13 +243,11 @@ let jit coralModule =
     let llengine = Llvm_executionengine.create llmodule in
     let ctype = Foreign.funptr (Ctypes.void @-> Ctypes.returning Ctypes.int32_t) in
     let init_func = Llvm_executionengine.get_function_address ".init" ctype llengine in
-    ignore (init_func ());
-    0
+    ignore (init_func ())
   with exc->
-    Printexc.to_string exc |> print_string;
-    0
+    Printexc.to_string exc |> print_string
+
 let run x =
   Printf.printf "Jitting...\n";
   flush stdout;
-  jit x;
-  0
+  jit x

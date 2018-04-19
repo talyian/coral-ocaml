@@ -6,6 +6,8 @@ open Grammar
 
 open LlvmBackend
 
+open OUnit
+
 let rec expand_tokens ctx lexbuf =
   match ctx.tokenqueue with
   | [] -> ctx.tokenqueue <- Lexer.coral_token ctx lexbuf; expand_tokens ctx lexbuf
@@ -39,25 +41,44 @@ let tokens lexbuf =
   in loop {tokenqueue=[]; indents=[0]}
 
 let parse lexbuf =
-  try
-    let m = Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf in
-    m
-    |> Multifunc.run
-    |> (fun m -> Ast.show m; m)
-    |> Return_insert.run
-    |> Init_func.run
-    |> Name_resolver.run
-    |> Type_resolver.run
-    (* |> LlvmBackend.run *)
-    |> ignore;
-    0;
-  with exc ->
-    printf "\027[1;31mError (%s)\027[0m\n" (Lexing.lexeme lexbuf);
-    let pos = lexbuf.lex_start_p in
-    printf "%d(%d:%d)\n" pos.pos_cnum pos.pos_lnum pos.pos_bol;
-    raise exc
+  let m =
+    try
+      Grammar.main (expand_tokens {tokenqueue=[]; indents=[0]}) lexbuf
+    with exc ->
+      printf "\027[1;31mError (%s)\027[0m\n" (Lexing.lexeme lexbuf);
+      let pos = lexbuf.lex_start_p in
+      printf "%d(%d:%d)\n" pos.pos_cnum pos.pos_lnum pos.pos_bol;
+      raise exc
+  in m
+  |> Multifunc.run
+  |> Return_insert.run
+  |> Init_func.run
+  |> Name_resolver.run
+  |> (fun m -> Ast.show m; m)
+  |> Type_resolver.run
+
+let parse_file filename = open_in filename |> Lexing.from_channel |> parse
+let run = LlvmBackend.run
 
 let () =
-  let f = open_in "samples/polymorphism_adhoc.coral" in
+  let parse_test filename = parse_file filename |> ignore in
+  let suite = "Tests" >::: [
+    "Core" >::: [
+      (* basics *)
+      "hello_world" >:: (fun _ -> parse_test "samples/core/hello.coral");
+      "factorial" >:: (fun _ -> parse_test "samples/core/factorial.coral");
+      "collatz"  >:: (fun _ -> parse_test "samples/core/collatz.coral");
+      (* inference *)
+      "inference" >:: (fun _ -> parse_test "samples/core/inference.coral");
+      "generics" >:: (fun _ -> parse_test "samples/core/tuples.coral");
+      "polymorphism" >:: (fun _ -> parse_test "samples/core/polymorphism_adhoc.coral");
+    ]
+  ]
+  in
+  OUnit.run_test_tt suite;
+  exit 0;
+  (* let f = open_in "samples/polymorphism_adhoc.coral" in *)
+  let f = open_in "samples/collatz.coral" in
+  (* let f = open_in "samples/factorial.coral" in *)
   let lexbuf = Lexing.from_channel f in
-  ignore (parse lexbuf)
+  parse lexbuf |> run

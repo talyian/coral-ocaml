@@ -3,7 +3,11 @@
 open Ast
 open Type_graph
 
-let rec createGraph (g:graph) = function
+let rec createGraph (g:graph) node =
+  (* Printf.printf "Node: ";
+   * (Ast.show node);
+   * flush stdout; *)
+  match node with
   | Module list ->
      ignore (List.map (createGraph g) list);
      None
@@ -69,7 +73,14 @@ let rec createGraph (g:graph) = function
              | "<=" -> ideq | ">=" -> ideq | "!=" -> ideq
              | _ -> id2) in
          Graph.addCons g t (Call ((cons, [Term lt; Term rt])));
-      | _ -> failwith "invalid type term in binop");
+      | _ ->
+         (match lterm, rterm with
+          | _, None -> Printf.printf "rterm is none\n"
+          | None, _ ->
+             Printf.printf "lterm is none\n"
+            ; Ast.show lhs
+          | _ -> ());
+         failwith "invalid type term in binop");
      Some t
   | Tuple list as t ->
      let terms = (List.fold_left (fun out x ->
@@ -82,7 +93,7 @@ let rec createGraph (g:graph) = function
   | Var v ->
      (match v.target with
       | None -> failwith ("unresolved reference " ^ v.name)
-      | Some(expr) -> Some (Graph.findTermByExpr g expr)
+      | Some(expr) -> Some(Graph.findTermByExpr g expr)
      )
   | Call (callee, args) as x ->
      let terms = (List.fold_left (fun out x ->
@@ -157,7 +168,6 @@ let run m =
   let graph = Graph.create () in
   let term = createGraph graph m in
   ignore term;
-
   let solution = Solver.init graph in
   Solver.show solution;
   let solution = Solver.solve solution in

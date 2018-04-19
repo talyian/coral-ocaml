@@ -22,4 +22,5 @@ main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.
 	-package llvm.passmgr_builder \
 	-package llvm \
 	-package str \
-	-package core
+	-package core \
+	-package oUnit
