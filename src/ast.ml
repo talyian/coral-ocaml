@@ -10,40 +10,48 @@ let rec type_to_string = function
   | Parameterized (name, params) -> name ^ "[" ^ String.concat ", " (List.map type_to_string params) ^ "]"
   | Dotted (n) -> "dotted"
 
-type varNode = {
-    name:string;
-    mutable varType: coraltype option;
-    mutable target: node option;
+type 'a varInfo = {
+  name:string;
+  mutable varType: coraltype option;
+  mutable target: 'a option;
 }
-and defNode = {
+
+type 'a defInfo = {
     name: string;
-    mutable defType:coraltype option
+    mutable defType: coraltype option;
 }
-and funcNode = {
-    name:string;
-    mutable ret_type: coraltype;
-    params: defNode list;
-    body: node;
-  }
+
+type 'a typeInfo = {
+  node: 'a;
+  mutable coraltype: coraltype option;
+}
+
+type 'a funcInfo = {
+  name: string;
+  mutable ret_type: coraltype;
+  params: ('a defInfo) list;
+  body: 'a
+}
 and node =
   | Module of (node list)
-  | Func of funcNode
-  | Multifunc of string * funcNode list
+  | Func of node funcInfo
+  | Multifunc of string * (node funcInfo) list
   | Comment of (string)
   | Binop of (string * node * node)
   | If of (node * node * node)
   | IntLiteral of string
   | FloatLiteral of string
   | StringLiteral of string
-  | Var of varNode
-  | Def of defNode
-  | Let of varNode * node
-  | Set of varNode * node
+  | Var of node varInfo
+  | Def of node defInfo
+  | Let of node varInfo * node
+  | Set of node varInfo * node
   | Block of node list
   | Call of node * node list
   | Tuple of (node list)
-  | Return of node
+  | Return of node typeInfo
   | Empty
+type defNode = node defInfo
 
 let newFunc (name, ret, params, body) = {
     name=name;
@@ -67,6 +75,9 @@ let string_escape s = s
   |> Str.global_replace (Str.regexp "\n") "\\n"
   |> Str.global_replace (Str.regexp "\t") "\\t"
 
+let string_name_escape s = s
+  |> Str.global_replace (Str.regexp "\n\|\t\| ") "_"
+                                                 
 let rec show1 indent (is_inline:bool) node =
   match node with
   | Block lines -> List.iter (show1 indent is_inline) lines
@@ -136,7 +147,7 @@ let rec show1 indent (is_inline:bool) node =
        )
     | Return v ->
        printf "return ";
-       show1 0 true v
+       show1 0 true (v.node)
     | Let(var, value) ->
        printf "let ";
        show1 0 true (Var var);

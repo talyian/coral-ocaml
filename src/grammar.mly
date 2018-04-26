@@ -36,6 +36,8 @@ line
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE
     { Func(newFunc (name, ret, p, Empty)) }
   | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None;varType=None}, e) }
+  | LET name=IDENTIFIER COLON t=typedef EQ e=expr NEWLINE {
+      Let({name=name;target=None;varType=Some(t)}, e) }
   | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None;varType=None}, e) }
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
@@ -65,8 +67,8 @@ expr
   | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }
   | callee=expr LPAREN RPAREN { Call(callee, []) }
   | callee=expr arg=expr { Call(callee, [arg]) }
-  | RETURN arg=expr { Return(arg) }
-  | RETURN { Return (Tuple []) }
+  | RETURN arg=expr { Return {node=arg;coraltype=None} }
+  | RETURN { Return {node=Tuple [];coraltype=None} }
 exprlist
   : e=expr { [e] }
   | x=exprlist COMMA e=expr { x@[e] }

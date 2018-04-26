@@ -10,19 +10,23 @@ let rec find_function = function
      Func (newFunc(name, ret_type, params, rewrite ret_type body))
   | n -> n
 and rewrite retType = function
-  | If (cond, ifbody, elsebody) -> If (cond, rewrite retType ifbody, rewrite retType elsebody)
+  | If (cond, ifbody, elsebody) ->
+     If (cond,
+         rewrite retType ifbody,
+         rewrite retType elsebody)
   | Block lines ->
      let rec loop x asdf =
        match List.rev asdf with
        | Empty _ as e:: xs -> loop (e::x) xs
        | Comment _ as e :: xs -> loop (e::x) xs
        | e :: xs -> rewrite retType e :: xs
-       | [] -> [Return Empty]
+       | [] -> [Return {node=Empty;coraltype=None}]
      in Block ((loop [] lines) |> List.rev)
   | Return _ as r -> r
+  | Empty -> Return {node=Tuple [];coraltype=None}
   | _ as e ->
      match retType with
-     | Type("Void") -> Block [e; Return Empty]
-     | _ -> Return e
+     | Type("Void") -> Block [e; Return {node=Tuple [];coraltype=None}]
+     | _ -> Return {node=e;coraltype=None}
 
 let run = find_function

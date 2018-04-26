@@ -23,7 +23,7 @@ let parse lexbuf =
 let parse_file filename = open_in filename |> Lexing.from_channel |> parse
 
 let parse_string x = Lexing.from_string x |> parse
-                                               
+
 let run = LlvmBackend.run
 
 let show m =

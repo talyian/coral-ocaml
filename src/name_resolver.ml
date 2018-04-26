@@ -65,7 +65,7 @@ let rec run1 scope = function
   | Tuple t as x ->
      let scope = List.fold_left (fun s p -> fst (run1 s p)) scope t in
      scope, x
-  | Return v as x-> ignore (run1 scope v); scope, x
+  | Return {node=v} as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
   | x ->
      Printf.printf "Warning: Unhandled node for name resolver: %s\n" (Ast.nodeName x);

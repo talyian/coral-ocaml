@@ -1,5 +1,7 @@
 open Printf
 
+let tee f x = f x; x
+
 type indexedColor =
   | BLACK
   | RED

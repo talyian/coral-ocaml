@@ -2,9 +2,10 @@ func printf : Void (p:Ptr, ...)
 
 func factorial (n):
   if n < 2:
-    return 1
+    1
   else:
-    return n * factorial(n - 1)
+    n * factorial(n - 1)
 
-printf("%ld! = %ld\n", 6, factorial 6)
-printf("%ld != %ld\n", 10, factorial 10)
+printf("%4ld! = %ld\n", 6, factorial 6)
+printf("%4ld! = %ld\n", 10, factorial 10)
+printf("%4ld! = %ld\n", 15, factorial 15)

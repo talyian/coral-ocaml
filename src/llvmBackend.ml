@@ -162,12 +162,14 @@ and run_func context = function
          | "%" -> Llvm.build_srem lval rval "" context.builder
          | _ -> failwith ("unknown operator " ^ op))
   | Def d_info -> Llvm.const_int (Llvm.i32_type context.context) 0;
+
   | Return(v) ->
      context.isTerminated <- true;
      (match v with
-      | Empty -> Llvm.build_ret_void context.builder
-      | Tuple([]) -> Llvm.build_ret_void context.builder
-      | value -> Llvm.build_ret (run_func context value) context.builder)
+      | {node=value;coraltype=None} | {node=value;coraltype=Some(Ast.Type "Void")} ->
+         ignore @@ run_func context value;
+         Llvm.build_ret_void context.builder
+      | {node=value} -> Llvm.build_ret (run_func context value) context.builder)
   | Call (callee, args) ->
      let llcallee = (run_func context callee) in
      let llargs = List.map (run_func context) args |> Array.of_list in
@@ -229,6 +231,8 @@ and run_func context = function
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
   Llvm_analysis.assert_valid_module llmodule;
+
+  (* Llvm.string_of_llmodule llmodule |> print_endline; *)
 
   let passmgrbuilder = Llvm_passmgr_builder.create () in
   let module_passmgr = Llvm.PassManager.create () in

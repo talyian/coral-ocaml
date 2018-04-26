@@ -16,7 +16,9 @@ let run = function
        | [] ->
           let main = match main with
             | None ->
-               let body = Ast.Block (List.rev (Return (Tuple []) :: move_lines)) in
+               let body = Ast.Block (
+                              List.rev (
+                                  Return {node=Tuple [];coraltype=None} :: move_lines)) in
                Ast.Func (newFunc(".init", Type("Void"), [], body))
             | Some f -> f
           in Module(main :: leave_lines |> List.rev)

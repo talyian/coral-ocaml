@@ -1,9 +1,12 @@
 (* Type Inference Engine *)
 
+let log_level = ref 1
+
 open Ast
 open Ansicolor
 open Printf
 
+       
 type term = { name: string; node: Ast.node option }
 type cons =
   | Term of term
@@ -13,6 +16,24 @@ type cons =
   | Member of cons * string
   | Union of cons list
 
+let rec cons_to_string = function
+  | Term t -> as_rgb (5, 2, 3)  t.name
+  | Union [a] -> cons_to_string a
+  | Union (a :: xs) -> cons_to_string a ^ " | " ^ (cons_to_string (Union xs))
+  | Union _ -> ""
+  | Free i -> as_rgb (5, 5, 5) ("τ" ^ string_of_int i)
+  | Type (name, params) ->
+     (match params with
+      | [] -> (as_rgb (4, 5, 3) name)
+      | p ->
+         let n = (as_rgb (4, 5, 3) name) in
+         let params = (List.map cons_to_string p) in
+         n ^ "[" ^ String.concat ", "  params ^ "]")
+  | Call (callee, args) ->
+     let args = List.map cons_to_string args |> String.concat ", " in
+     Printf.sprintf "call(%s, %s)" (cons_to_string callee) args
+  | Member(base, mem) -> "member." ^ mem
+
 module StringMap = Map.Make(String)
 module IntMap = Map.Make(Int32)
 module TermMap = Map.Make(struct
@@ -20,7 +41,8 @@ module TermMap = Map.Make(struct
   let compare a b = compare a.name b.name
 end)
 
-type graph = {
+(* A type environment *)
+type typeEnv = {
   mutable names: term StringMap.t;
   mutable terms: term list;
   mutable edges: (term * cons) list;
@@ -62,58 +84,45 @@ end
 
 module Graph = struct
 
-  let rec cons_to_string = function
-    | Term t -> as_rgb (5, 2, 3)  t.name
-    | Union [a] -> cons_to_string a
-    | Union (a :: xs) -> cons_to_string a ^ " | " ^ (cons_to_string (Union xs))
-    | Union _ -> ""
-    | Free i -> as_rgb (5, 5, 5) ("τ" ^ string_of_int i)
-    | Type (name, params) ->
-       (match params with
-        | [] -> (as_rgb (4, 5, 3) name)
-        | p -> (as_rgb (4, 5, 3) name) ^ "[" ^ String.concat ", " (List.map cons_to_string params) ^ "]")
-    | Call (callee, args) ->
-       let args = List.map cons_to_string args |> String.concat ", " in
-       Printf.sprintf "call(%s, %s)" (cons_to_string callee) args
-    | Member(base, mem) -> "member." ^ mem
-
-  let show (graph:graph) =
+  let show (typeEnv:typeEnv) =
     let rec loop = function
       | [] -> ()
       | (t, c) :: xs ->
          Printf.printf "%20s :: %-20s\n"
            (Printf.sprintf "%20s" t.name)
            (cons_to_string c);
-         loop xs in loop graph.edges
+         loop xs in loop typeEnv.edges
 
   let create () = { names=StringMap.empty; terms=[]; edges=[] }
-  let addOptionalTerm (graph:graph) name astnode =
+                    
+  let addOptionalTerm (typeEnv:typeEnv) name astnode =
     let indexedname = function
       | 0 -> name
       | n -> name ^ "." ^ string_of_int n in
     let rec tryindex i =
       let iname = indexedname i in
-      match StringMap.find_opt iname graph.names with
+      match StringMap.find_opt iname typeEnv.names with
       | Some(existing) -> tryindex (i + 1)
       | None -> iname in
     let name = tryindex 0 in
     let term = {name=name;node=astnode} in
-    graph.terms <- term::graph.terms;
-    graph.names <- StringMap.add name term graph.names;
+    typeEnv.terms <- term::typeEnv.terms;
+    typeEnv.names <- StringMap.add name term typeEnv.names;
     term
-  let addTerm graph name node = addOptionalTerm graph name (Some node)
+      
+  let addTerm (typeEnv:typeEnv) name node = addOptionalTerm typeEnv name (Some node)
 
-  let addCons (graph:graph) term cons = graph.edges <- (term, cons) :: graph.edges
+  let addCons (typeEnv:typeEnv) term cons = typeEnv.edges <- (term, cons) :: typeEnv.edges
 
-  let findTermByExpr graph astnode =
+  let findTermByExpr typeEnv astnode =
     match List.find_opt (function
               | {node=Some n} when n == astnode -> true
               | {node=Some(Def v)} ->
                  (match astnode with
                   | Def u -> u = v
                   | _ -> false)
-              | _ -> false) graph.terms with
-    | None -> (show graph; failwith "did not find expression")
+              | _ -> false) typeEnv.terms with
+    | None -> (show typeEnv; failwith "did not find expression")
     | Some(e) -> e
 
 end
@@ -124,7 +133,7 @@ module Solver = struct
       mutable critical_terms: vertices;
       mutable dependent_terms: vertices;
     }
-  let init (graph:graph) =
+  let init (typeEnv:typeEnv) =
     let critical_terms =
       List.fold_left (fun map (term, cons) ->
           TermMap.update term
@@ -132,12 +141,12 @@ module Solver = struct
              |Some(edge_set) -> Some(EdgeSet.add {term=term;cons=cons;active=true} edge_set)
              | None -> Some(EdgeSet.singleton {term=term;cons=cons;active=true}))
             map
-        ) TermMap.empty graph.edges in
+        ) TermMap.empty typeEnv.edges in
     { critical_terms=critical_terms;
       dependent_terms=TermMap.empty; }
 
-  let show solution =
-    printf " [Solution] ----------------------------------------\n";
+  let show_labeled label solution =
+    printf "- [%s] ----------------------------------------\n" label;
     let print_terms color_triple x =
       TermMap.bindings x
       |> List.map (fun (t, e) -> EdgeSet.elements e)
@@ -146,10 +155,12 @@ module Solver = struct
            (fun edge ->
              printf "%s :: %s\n"
                (as_rgb color_triple (sprintf "%20s" edge.term.name))
-               (Graph.cons_to_string edge.cons))
+               (cons_to_string edge.cons))
     in
     print_terms (1, 5, 2) solution.critical_terms;
     print_terms (5, 3, 3) solution.dependent_terms
+
+  let show = show_labeled "Solution"
 
   let delete_term solution term =
     {solution with critical_terms=TermMap.remove term solution.critical_terms}
@@ -207,19 +218,28 @@ module Solver = struct
     | Type (name, params) -> Type(name, List.map (instantiate instances solution) params)
     | n -> n
 
-  type unificationStatus = | Success of (term * cons) list | Fail of string
+  type unificationStatus =
+    (* Reduced constraints *)
+    | Success of (term * cons) list
+    (* Could not reduce constraints *)
+    | Defer of (term * cons) list
+    (* constraints are invalid *)
+    | Fail of string
 
   let combine_unification a b = match a, b with
-    | Success alist, Success blist -> Success (alist @ blist)
     | Fail a, Fail b -> Fail (a ^ ", " ^ b)
     | Fail a, _ -> Fail a
     | _, Fail b -> Fail b
+    | Success alist, Success blist -> Success (alist @ blist)
+    | (Defer alist, Success blist) -> Success (alist @ blist)
+    | (Success blist, Defer alist) -> Success (alist @ blist)
+    | Defer alist, Defer blist -> Defer (alist @ blist)
 
   let rec unify solution a b =
     match a, b with
     | Type(x, xp), Type(y, yp) ->
        if x <> y then
-         Fail ("Type Mismatch " ^ (Graph.cons_to_string a) ^ ", " ^ (Graph.cons_to_string b))
+         Fail ("Type Mismatch " ^ (cons_to_string a) ^ ", " ^ (cons_to_string b))
        else
          let results = List.map2 (unify solution) xp yp in
          List.fold_left combine_unification (Success []) results
@@ -243,13 +263,14 @@ module Solver = struct
        else if Array.length args_a + 1 != Array.length params_a then
          Fail (sprintf
                  "parameter count mismatch (%s, %s)\n"
-                 (Graph.cons_to_string a)
-                 (Graph.cons_to_string b))
+                 (cons_to_string a)
+                 (cons_to_string b))
        else
          let len = Array.length args_a in
          let param_results = Array.map2 (unify solution) args_a (Array.sub params_a 0 len) in
          let result = unify solution lhs (Array.get params_a len) in
          Array.fold_left combine_unification result param_results
+    | Term x, Call _ -> Defer [x, b]
     (* | Term x, Union cases -> *)
     | (Term _ as lhs, Union cases) | (Type _ as lhs, Union cases) ->
        let case_results = List.map (unify solution lhs) cases
@@ -259,10 +280,14 @@ module Solver = struct
          | _ ->
             match List.find_opt (function | Success (a :: b:: c) -> true | _ ->false) case_results with
             | Some x -> Fail "multiple constraints out of union"
-            | _ -> Success [])
+            | _ ->
+               let all_cases = case_results
+                               |> List.map (function | Success x -> x | Defer x -> x | _ -> [])
+                               |> List.concat in
+               Success all_cases)
     | _ -> Fail (sprintf
                    "unhandled unification:\n\t%s\n\t%s\n"
-                   (Graph.cons_to_string a) (Graph.cons_to_string b))
+                   (cons_to_string a) (cons_to_string b))
 
   let unify_all solution constraints =
     (match constraints with
@@ -275,14 +300,39 @@ module Solver = struct
         results
      | _ -> failwith "unification shape error")
 
+
+  let rec simplify_cases = function
+    | [n] -> [n]
+    | Type (a, ax) as tt :: Union rest :: more -> simplify_cases (tt :: rest @ more)
+    | Type (a, ax) as tt :: rest ->
+         (match List.partition (function
+             | Type (b, bx) when b = a && bx = ax -> true
+             | Type (b, bx) when b = a -> printf "type  match???"; false
+             | Type (b, bx) when bx = ax -> printf "prams match??"; false
+             | Type _ -> printf "bad type?"; false
+             | _ -> printf "oof"; false) rest with
+          | [], not_equals -> (tt :: simplify_cases not_equals)
+          | equals, not_equals -> simplify_cases (tt :: not_equals) )
+      | cases -> cases
+  and simplify_cons = function
+    | Union cases ->
+       (match simplify_cases cases with
+        | [n] -> n
+        | x -> Union x)
+    | n -> n
   let step_union solution =
     let replace_edge e =
-      (* printf "\t%s:: %s\n" e.term.name (Graph.cons_to_string e.cons); *)
       let rec replace_cons = function
-        | Union [Type (a, ax); Type(b, bx)] when (a = b && ax = bx) -> Type(a, ax)
+        | Union cases ->
+           simplify_cons (Union cases)
         | Type(a, p) -> Type(a, List.map replace_cons p)
         | Call(x, ys) -> Call(replace_cons x, List.map replace_cons ys)
         | n -> n in
+      (* printf "step_union :: \t%s:: %s\n \t:: %s\n"
+       *   e.term.name
+       *   (cons_to_string e.cons)
+       *   (cons_to_string @@ replace_cons e.cons)
+       * ; *)
       {e with cons=replace_cons e.cons}
     in
     let rep = TermMap.map (fun edges -> EdgeSet.map replace_edge edges) in
@@ -300,9 +350,18 @@ module Solver = struct
      | [Union y] -> let s = defer_term solution term (Union y) in substitute_term s term (Union y)
      | [ Call(Type("Func", params), args) as y ] ->
         let sol = delete_term solution term in
+        if term.name = "call.collatz_loop" then begin
+            printf "Unifying callcollatz_loop\n";
+            show_labeled "sol" solution
+        end;
         (match unify sol (Term term) y with
          | Fail s -> printf "Error: %s\n" (as_color (Bold RED) s); sol
-         | Success list -> add_constraints sol list;)
+         | Success list ->
+            printf "success\n";
+            list |> List.iter (fun (tt, tc) ->
+                        printf "  %s :: %s\n" tt.name (cons_to_string tc));
+            add_constraints sol list
+         | Defer list -> add_constraints sol list)
      | [ Call(Union cases, args) ] ->
         let sol = delete_term solution term in
         let status = List.map (fun c -> unify sol (Term term) (Call (c, args))) cases in
@@ -312,12 +371,16 @@ module Solver = struct
      | [ _ ] -> solution
      | x :: xs ->
         match unify_all solution (x :: xs) with
-        | Success list -> let solution = defer_term_all solution term in add_constraints solution list;
+        | Success list ->
+           let solution = defer_term_all solution term in add_constraints solution list
+        | Defer list ->
+           let solution = defer_term_all solution term in add_constraints solution list
         | Fail s -> printf "Error: %s\n" (as_color (Bold RED) s); solution
     )
 
-  let step sol =
-    let sol = step_union sol in
+  let step sol0 =
+    (* show_labeled "Step" sol; *)
+    let sol = step_union sol0 in
     let folder term edge_set solution =
       let edge_set = TermMap.find term solution.critical_terms in
       step_term solution term (edge_set |> EdgeSet.elements |> List.map (fun e -> e.cons))
@@ -337,22 +400,63 @@ module Solver = struct
     List.fold_left (fun sol {term=t;cons=c} -> substitute_term sol t c) solution types
 
   let rec solve solution =
+    let _show_labeled x y = if !log_level > 0 then show_labeled x y in
     solution
+    |> tee (_show_labeled "Start")
     |> step |> step |> step |> step  |> step |> step |> fix |> step |> step |> fix
+    |> tee (_show_labeled "Solved")
+    |> tee (fun x -> flush stdout; x)
 end
 
+module Solver2 = struct
+(* solve_with : 
+ * takes an existing set of type terms and a new system of
+ * constraints, reduces the constraints, 
+ * and returns a new environment  *)                  
+let solve_with
+      environ (* already known terms *)
+      system (* a set of constraints to solve *)  =
+  ()
+
+let withTerm name node (graph:typeEnv) =
+  let term = Graph.addTerm graph name node in
+  Graph.show graph;
+  term, graph
+let create_new_from_terms termPairs =
+  let rec create_from_terms (graph:typeEnv) terms = function
+    | [] -> terms, graph
+    | (a, b) :: rest ->
+       let tt, newgraph = withTerm a b graph in
+       create_from_terms graph (tt :: terms) rest in
+  let gg = Graph.create () in
+  create_from_terms gg [] termPairs
+                    
+let test () =
+  let [x; r; i], graph = create_new_from_terms [
+     "x", Empty;
+     "r", Empty;
+     "i", Empty; ] in
+  Graph.addCons graph i (Term x);
+  Graph.addCons graph i (Type ("Int32", []));
+  Graph.show graph;
+  ()
+    
+end
+
+let () = Solver2.test(); exit 0
+    
 (* let () =
  *   let type1 =
  *     printf "[Type Graph Test]  ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
- *     let graph = Graph.create () in
- *     let t1 = Graph.addTerm graph "x" Empty in
- *     let r0 = Graph.addTerm graph "r" Empty in
- *     let i0 = Graph.addTerm graph "i" Empty in
- *     Graph.addCons graph i0 (Type ("Int32", [])) ;
- *     Graph.addCons graph i0 (Term t1);
- *     Graph.addCons graph r0 (Call (Type ("Func", [Free 100; Free 100]), [Term t1]));
- *     Graph.show graph;
- *     graph
+ *     let typeEnv = Graph.create () in
+ *     let t1 = Graph.addTerm typeEnv "x" Empty in
+ *     let r0 = Graph.addTerm typeEnv "r" Empty in
+ *     let i0 = Graph.addTerm typeEnv "i" Empty in
+ *     Graph.addCons typeEnv i0 (Type ("Int32", [])) ;
+ *     Graph.addCons typeEnv i0 (Term t1);
+ *     Graph.addCons typeEnv r0 (Call (Type ("Func", [Free 100; Free 100]), [Term t1]));
+ *     Graph.show typeEnv;
+ *     typeEnv
  *     |> Solver.init
  *     |> Solver.solve
  *     |> Solver.show

@@ -11,7 +11,7 @@ let rec type_to_constraint = function
   | Ast.Parameterized (s, p) -> Type_graph.Type (s, List.map type_to_constraint p)
   | Ast.Dotted items -> failwith "unhandled dotted type"
 
-let rec createGraph (g:graph) node =
+let rec createGraph g node =
   (* Printf.printf "Node: ";
    * (Ast.show node);
    * flush stdout; *)
@@ -51,27 +51,41 @@ let rec createGraph (g:graph) node =
          Some term
       | (None, Some(x))
       | (Some(x), None) -> Graph.addCons g term (Term x); Some term
-      | _ -> failwith "invalid terms in if type analysis")
+      | _ ->
+         Ast.show @@ If(cond, i, e);
+         failwith "invalid terms in if type analysis")
   | Let (var, expr) as x ->
      let expr_term = createGraph g expr in
      let term = Graph.addTerm g var.name x in
-     (match expr_term with
-      | Some(e) -> Graph.addCons g term (Term e); Some term
-      | _ -> failwith "invalid term in let type analysis")
+     (match var.varType with
+      | Some(v) -> Graph.addCons g term (type_to_constraint v); Some term
+      | None ->
+         (match expr_term with
+          | Some(e) -> Graph.addCons g term (Term e); Some term
+          | _ -> failwith "invalid term in let type analysis"))
   | IntLiteral i as v ->
      let t = Graph.addTerm g ("i" ^ i) v in
      let cons = (Type ("Int64", [])) in
      Graph.addCons g t cons;
      Some t
   | StringLiteral i as v ->
-     let t = Graph.addTerm g ("s" ^ string_escape i) v in
+     let i = match String.length i with
+       | n when n < 15 -> i
+       | _ -> String.sub i 0 13 ^ ".." in
+     let t = Graph.addTerm g ("s" ^ string_name_escape i) v in     
      let cons = (Type ("String", [])) in
      Graph.addCons g t cons; Some t
   | FloatLiteral i as v ->
      let t = Graph.addTerm g ("f" ^ i) v in
      let cons = (Type ("Float64", [])) in
      Graph.addCons g t cons; Some t
-  | Return e -> createGraph g e
+  | Return {node=e;coraltype=ctype} as r ->
+     (match createGraph g e with
+      | None -> None
+      | Some(t) ->
+         let term = Graph.addTerm g ("ret." ^ t.name) r in
+         Graph.addCons g term (Term t);
+         Some term)
   | Binop (op, lhs, rhs) as x->
      let rterm = createGraph g rhs in
      let lterm = createGraph g lhs in
@@ -121,7 +135,7 @@ let rec createGraph (g:graph) node =
       | None -> failwith "invalid callee term in call"
       | Some(callee_term) ->
          let term = Graph.addTerm g ("call." ^ callee_term.name) x in
-         Graph.addCons g term (Call (Term callee_term, terms));
+         Graph.addCons g term (Call (Term callee_term, List.rev terms));
          Some term)
   | Multifunc (name, funcs) as mf ->
      let term = Graph.addTerm g name mf in
@@ -150,7 +164,7 @@ let applySolution (solution:Solver.solution) =
         (* Printf.printf "func name %s returns %s\n" func.name (type_to_string cons_type); *)
         (match cons_type with
          | Parameterized ("Func", cons_params) ->
-            (match List.rev cons_params with
+            (match cons_params with
              | [] -> failwith "???"
              | ret :: ptypes ->
                 let newparams =
@@ -171,7 +185,8 @@ let applySolution (solution:Solver.solution) =
         v.varType <- Some cons_type;
         Let(v, value)
      | Return v ->
-        (* Printf.printf "return is typed %s\n" (type_to_string cons_type); *)
+        Printf.printf "return is typed %s\n" (type_to_string cons_type);
+        v.coraltype <- Some(cons_type);
         Return v
      | n -> n
   in
@@ -195,4 +210,5 @@ let run m =
   let solution = Solver.init graph in
   let solution = Solver.solve solution in
   applySolution solution;
+  Ast.show m; flush stdout;
   m
