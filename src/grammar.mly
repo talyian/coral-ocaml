@@ -19,7 +19,7 @@ open Ast
 %token EOF
 %type <Ast.node> expr line block main
 %type <Ast.node list> lines
-%type <Ast.defNode list> paramlist
+%type <Ast.node list> paramlist
 %%
 
 main
@@ -78,9 +78,9 @@ operator
   | EQ { "=" }
 
 param
-  : e=IDENTIFIER { {name=e; defType=None} }
-  | e=IDENTIFIER COLON t=typedef { {name=e; defType=Some t} }
-  | ELLIPSIS { {name="..."; defType=Some (Type "...") } }
+  : e=IDENTIFIER { Def {name=e; defType=None} }
+  | e=IDENTIFIER COLON t=typedef { Def {name=e; defType=Some t} }
+  | ELLIPSIS { Def {name="..."; defType=Some (Type "...") } }
 paramlist
   : e=non_empty_paramlist { e }
   | { [] }

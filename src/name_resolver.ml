@@ -23,7 +23,7 @@ let rec run1 scope = function
      scope, m
   | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
      let scope = addName name f scope in
-     let scope = List.fold_left (fun s p -> fst(run1 s (Def p))) scope params in
+     let scope = List.fold_left (fun s p -> fst(run1 s p)) scope params in
      let scope, body = run1 scope body in
      scope, f
   | Multifunc (name, funcs) as mf ->

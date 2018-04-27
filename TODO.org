@@ -1,7 +1,10 @@
 * DONE Type inference on functions
   We need to apply all the constraints to the AST tree.
   Easiest way is probably to make all the nodes mutable
-
+** TODO Reimplement type_resolver
+** TODO Remove Type_graph_v1
+* TODO Imports
+* TODO Prelude-based operators and c compat
 * TODO Implement Anonymous Tuples / lists
   #+BEGIN_SRC
   let p = (1, 2.0, "foobar")

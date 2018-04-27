@@ -29,7 +29,7 @@ type 'a typeInfo = {
 type 'a funcInfo = {
   name: string;
   mutable ret_type: coraltype;
-  params: ('a defInfo) list;
+  params: 'a list;
   body: 'a
 }
 and node =
@@ -77,8 +77,9 @@ let string_escape s = s
 
 let string_name_escape s = s
   |> Str.global_replace (Str.regexp "\n\|\t\| ") "_"
-                                                 
-let rec show1 indent (is_inline:bool) node =
+
+let rec pprint1 fmt indent (is_inline:bool) node =
+  let show1 = pprint1 fmt in
   match node with
   | Block lines -> List.iter (show1 indent is_inline) lines
   | If (cond, ifbody, elsebody) ->
@@ -101,10 +102,10 @@ let rec show1 indent (is_inline:bool) node =
       | tt -> printf "func %s: %s(" name (type_to_string ret_type));
      let rec loop = function
        | [] -> ()
-       | p :: xs ->
+       | Def p :: xs ->
           show1 0 true (Def p);
-          match xs with | [] -> () | _ -> printf ", ";
-          loop xs
+          (match xs with | [] -> () | _ -> printf ", "; loop xs)
+       | _ -> failwith "oops"
      in loop params;
      printf "):\n";
      show1 (indent + 1) is_inline body
@@ -167,4 +168,5 @@ let rec show1 indent (is_inline:bool) node =
     );
     if not is_inline then printf "\n"
 
-let show = show1 0 false
+let show = pprint1 Format.std_formatter 0 false
+let string_of_node x = pprint1 Format.str_formatter 0 false x; Format.flush_str_formatter ()

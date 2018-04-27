@@ -61,11 +61,16 @@ let rec run1 llvalues = function
               let llret = llvmType lvContext ret_type in
               let vararg =
                 params
-                |> List.exists (function | {defType=Some(Type("..."))} -> true | _ -> false) in
+                |> List.exists (function | Def {defType=Some(Type("..."))} -> true | _ -> false)
+              in
               let llparams =
                 params
-                |> List.filter (function | {defType=Some(Type("..."))} -> false | _ -> true)
-                |> List.map (fun v -> llvmType lvContext (default (Type "Int32") v.defType))
+                |> List.filter (function | Def {defType=Some(Type("..."))} -> false | _ -> true)
+                |> List.map (
+                       function
+                       | Def (v) ->
+                          llvmType lvContext (default (Type "Int32") v.defType)
+                       | _ -> failwith "oops")
                 |> Array.of_list in
               let func_type =
                 if vararg then
@@ -94,7 +99,7 @@ let rec run1 llvalues = function
 
 and run_func context = function
   | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
-     let rec loop i p =
+     let rec loop i (Def p) =
        match p.defType with
        | None -> failwith "def has no type"
        | Some(def_type) ->

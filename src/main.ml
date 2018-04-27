@@ -1,12 +1,15 @@
 open CoralModule
 
 let () =
+  (* run @@ parse_file "samples/core/hello.coral"; *)
+  run @@ parse_file "samples/core/factorial.coral";
+  
   (* run @@ parse_file "samples/core/hello.coral";
    * run @@ parse_file "samples/core/factorial.coral";
    * run @@ parse_file "samples/core/collatz.coral";
    * run @@ parse_file "samples/core/fizzbuzz.coral"; *)
 
-  run @@ parse_file "samples/core/polymorphism_adhoc.coral";
+  (* run @@ parse_file "samples/core/polymorphism_adhoc.coral"; *)
   (* run @@ parse_file "samples/core/fizzbuzz.coral"; *)
   (* let parse_test filename = parse_file filename |> ignore in
    * let suite = "Tests" >::: [
