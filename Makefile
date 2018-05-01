@@ -23,7 +23,7 @@ type_resolver.native: src/type_resolver.ml src/type_graph_2.ml
 
 main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.ml \
  src/return_insert.ml src/ansicolor.ml src/coralModule.ml \
- src/name_resolver.ml src/multifunc.ml src/type_resolver.ml src/type_graph.ml \
+ src/name_resolver.ml src/multifunc.ml src/type_resolver.ml \
  src/type_graph_2.ml src/llvmBackend.ml
 	ocamlbuild -use-ocamlfind -use-menhir -I src main.native -tag debug \
 	-package llvm \

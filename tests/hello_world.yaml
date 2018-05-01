@@ -1,5 +1,0 @@
-title: hello_world
-expected_output: Hello, World!
----
-func printf: Void(fmt: Ptr, ...)
-printf "Hello, World!\n"
