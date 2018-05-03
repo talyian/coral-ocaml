@@ -21,11 +21,14 @@ type_resolver.native: src/type_resolver.ml src/type_graph_2.ml
 	ocamlbuild -use-ocamlfind -I src -I src/test $@ -tag debug \
 	-package str
 
-main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.ml \
+main.native: src/grammar.mly src/lexer.mll src/lexerInterface.ml \
+ src/main.ml src/ast.ml src/init_func.ml \
  src/return_insert.ml src/ansicolor.ml src/coralModule.ml \
  src/name_resolver.ml src/multifunc.ml src/type_resolver.ml \
- src/type_graph_2.ml src/llvmBackend.ml
-	ocamlbuild -use-ocamlfind -use-menhir -I src main.native -tag debug \
+ src/type_graph_2.ml src/llvmBackend.ml _build/src/foobar.o
+	ocamlbuild -verbose 1 -use-ocamlfind -use-menhir -I src $@ \
+	-lflags -cclib,src/foobar.o \
+	-tag debug \
 	-package llvm \
 	-package ctypes \
 	-package llvm.executionengine \
@@ -35,3 +38,6 @@ main.native: src/grammar.mly src/lexer.mll src/main.ml src/ast.ml src/init_func.
 	-package str \
 	-package core \
 	-package oUnit
+
+_build/src/foobar.o: src/foobar.c
+	${CC} -c -o $@ $+

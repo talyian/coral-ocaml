@@ -245,8 +245,6 @@ and run_func context = function
 
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
-  Llvm.string_of_llmodule llmodule |> print_endline;
-  flush stdout;
   Llvm_analysis.assert_valid_module llmodule;
 
   let passmgrbuilder = Llvm_passmgr_builder.create () in
@@ -255,6 +253,8 @@ let jit coralModule =
   Llvm_passmgr_builder.populate_module_pass_manager module_passmgr passmgrbuilder;
   ignore (Llvm.PassManager.run_module llmodule module_passmgr);
 
+  (* Llvm.string_of_llmodule llmodule |> print_endline;
+   * flush stdout; *)
   try
     ignore (Llvm_executionengine.initialize());
     let llengine = Llvm_executionengine.create llmodule in

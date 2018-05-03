@@ -34,7 +34,7 @@ rule coral_token ctx = parse
      let indent_len = String.length tok - 1 in
      lexbuf.lex_curr_p <- {
         lexbuf.lex_curr_p with
-        pos_bol = indent_len;
+        pos_bol = lexbuf.lex_start_pos + 1;
         pos_lnum = lexbuf.lex_curr_p.pos_lnum + 1
      };
      (Grammar.NEWLINE(String.length tok) :: (match ctx.indents with

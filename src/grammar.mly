@@ -11,6 +11,7 @@ open Ast
 %token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
 %token LPAREN RPAREN COLON INDENT DEDENT
 %token EQ
+
 (*
 %left PLUS MINUS
 %left TIMES DIV
@@ -51,7 +52,7 @@ ifexpr
   | IF cond=expr2 ifbody=block_or_line ELSE elsebody=ifexpr { If(cond, ifbody, elsebody) }
 
 lines
-  : e=line { [e] }
+  : line { [$1] }
   | x=lines e=line { x @ [e] }
   | x=lines NEWLINE { x }
 
@@ -72,23 +73,23 @@ expr_atom
 (* Higher Precedence than operators *)
 expr_op_unit
   : e=expr_atom { e }
-  | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }
-  | callee=expr LPAREN RPAREN { Call(callee, []) }
-  | callee=expr arg=expr { Call(callee, [arg]) }
+  | callee=expr_atom LPAREN args=exprlist RPAREN { Call(callee, args) }
+  | callee=expr_op_unit LPAREN RPAREN { Call(callee, []) }
+  | callee=expr_op_unit arg=expr_atom { Call(callee, [arg]) }
 
 expr0
   : e=expr_op_unit { e }
-  | lhs=expr0 op=OPERMUL rhs=expr_op_unit { Binop(op, lhs, rhs) }
+  | lhs=expr0 op=OPERMUL rhs=expr0 { Binop(op, lhs, rhs) }
 
 expr1
   : e=expr0 { e }
-  | lhs=expr1 op=OPERADD rhs=expr0 { Binop(op, lhs, rhs) }
-  | lhs=expr1 op=OPERATOR rhs=expr0 { Binop(op, lhs, rhs) }
+  | lhs=expr1 op=OPERADD rhs=expr1 { Binop(op, lhs, rhs) }
+  | lhs=expr1 op=OPERATOR rhs=expr1 { Binop(op, lhs, rhs) }
 
 expr2
   : e=expr1 { e }
-  | l=expr2 o=OPERCMP r=expr1 { Binop (o, l, r) }
-  | l=expr2 EQ r=expr1 { Binop ("=", l, r) }
+  | l=expr2 o=OPERCMP r=expr2 { Binop (o, l, r) }
+  | l=expr2 EQ r=expr2 { Binop ("=", l, r) }
 
 expr : e=expr2 { e }
 

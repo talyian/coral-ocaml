@@ -1,12 +1,12 @@
 func printf: Void(fmt:Ptr, ...)
 
 func fizzbuzz(n):
-  if (n % 15) = 0:
-    printf("fizzbuzz\n")
+  if n % 15 = 0:
+    printf "fizzbuzz\n"
   else if n % 3 = 0:
-    printf("fizz ")
+    printf "fizz "
   else if (n % 5) = 0:
-    printf("buzz ")
+    printf "buzz "
   else:
     printf("%ld ", n)
 
@@ -15,3 +15,4 @@ func loop (a, b):
   if a < b: loop(a + 1, b)
 
 loop (1, 50)
+printf "\n"

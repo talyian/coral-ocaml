@@ -1,6 +1,5 @@
 func printf:Void (x:Ptr, ...)
 
-### Collatz
 func collatz(n):
   if n = 1: 0
   else if 0 = n % 2: 1 + collatz (n / 2)
@@ -10,5 +9,6 @@ func collatz_loop (a, b):
   if a < b:
     printf ("%d ", collatz a)
     collatz_loop (a + 1, b)
-collatz_loop(2, 20)
+
+collatz_loop(2, 30)
 printf "\n"

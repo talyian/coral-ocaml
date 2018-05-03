@@ -1,11 +1,10 @@
-func printf: Void(fmt:Ptr, ...)
-
 func factorial(n):
   if n < 2:
     1
   else:
-    n * factorial(n - 1)
+    n * factorial (n - 1)
 
+func printf: Void(fmt:Ptr, ...)
 printf ("%5ld! = %ld\n", 6, factorial(6))
 printf ("%5ld! = %ld\n", 8, factorial(8))
 printf ("%5ld! = %ld\n", 14, factorial(14))
