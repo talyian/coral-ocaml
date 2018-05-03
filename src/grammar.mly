@@ -4,7 +4,8 @@ open Ast
 
 %token <string> INTEGER
 %token <string> FLOAT
-%token <string> OPERATOR IDENTIFIER STRING
+%token <string> OPERATOR OPERADD OPERMUL OPERCMP
+%token <string> IDENTIFIER STRING
 %token <char> OTHER
 %token <int> NEWLINE
 %token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
@@ -23,8 +24,8 @@ open Ast
 %%
 
 main
-  : x=lines EOF        { Module(x) }
-  | x=lines e=expr EOF { Module(x @ [e]) }
+  : x=lines EOF        { Module(make_module x) }
+  | x=lines e=expr EOF { Module(make_module @@ x @ [e]) }
 
 line
   : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block
@@ -39,13 +40,15 @@ line
   | LET name=IDENTIFIER COLON t=typedef EQ e=expr NEWLINE {
       Let({name=name;target=None;varType=Some(t)}, e) }
   | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None;varType=None}, e) }
+  | RETURN arg=expr NEWLINE { Return {node=arg;coraltype=None} }
+  | RETURN NEWLINE { Return {node=Tuple [];coraltype=None} }
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
 
 ifexpr
-  : IF cond=expr ifbody=block_or_line { If(cond, ifbody, Empty) }
-  | IF cond=expr ifbody=block_or_line ELSE elsebody=block_or_line { If(cond, ifbody, elsebody) }
-  | IF cond=expr ifbody=block_or_line ELSE elsebody=ifexpr { If(cond, ifbody, elsebody) }
+  : IF cond=expr2 ifbody=block_or_line { If(cond, ifbody, Empty) }
+  | IF cond=expr2 ifbody=block_or_line ELSE elsebody=block_or_line { If(cond, ifbody, elsebody) }
+  | IF cond=expr2 ifbody=block_or_line ELSE elsebody=ifexpr { If(cond, ifbody, elsebody) }
 
 lines
   : e=line { [e] }
@@ -58,24 +61,40 @@ block_or_line
   : e=block { e }
   | COLON e=expr NEWLINE { e }
 
-expr
+(* Higher Precedence than calling *)
+expr_atom
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
   | e=STRING { StringLiteral e }
-  | lhs=expr op=operator rhs=expr { Binop (op, lhs, rhs) }
+  | LPAREN e=expr2 RPAREN { e }
+
+(* Higher Precedence than operators *)
+expr_op_unit
+  : e=expr_atom { e }
   | callee=expr LPAREN args=exprlist RPAREN { Call(callee, args) }
   | callee=expr LPAREN RPAREN { Call(callee, []) }
   | callee=expr arg=expr { Call(callee, [arg]) }
-  | RETURN arg=expr { Return {node=arg;coraltype=None} }
-  | RETURN { Return {node=Tuple [];coraltype=None} }
+
+expr0
+  : e=expr_op_unit { e }
+  | lhs=expr0 op=OPERMUL rhs=expr_op_unit { Binop(op, lhs, rhs) }
+
+expr1
+  : e=expr0 { e }
+  | lhs=expr1 op=OPERADD rhs=expr0 { Binop(op, lhs, rhs) }
+  | lhs=expr1 op=OPERATOR rhs=expr0 { Binop(op, lhs, rhs) }
+
+expr2
+  : e=expr1 { e }
+  | l=expr2 o=OPERCMP r=expr1 { Binop (o, l, r) }
+  | l=expr2 EQ r=expr1 { Binop ("=", l, r) }
+
+expr : e=expr2 { e }
+
 exprlist
   : e=expr { [e] }
   | x=exprlist COMMA e=expr { x@[e] }
-
-operator
-  : e=OPERATOR { e }
-  | EQ { "=" }
 
 param
   : e=IDENTIFIER { Def {name=e; defType=None} }

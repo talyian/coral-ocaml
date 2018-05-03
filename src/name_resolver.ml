@@ -18,7 +18,7 @@ let addName name value scope = {scope with names=StringMap.add name value scope.
 
 (* point all the Var nodes to a preceding expression *)
 let rec run1 scope = function
-  | Module lines as m ->
+  | Module {lines=lines} as m ->
      let scope = List.fold_left (fun s p -> fst (run1 s p)) scope lines in
      scope, m
   | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->

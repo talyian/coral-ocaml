@@ -3,7 +3,7 @@
 open Ast
 
 let rec find_function = function
-  | Module lines -> Module(List.map find_function lines)
+  | Module m -> Module {m with lines=List.map find_function m.lines}
   | Func {name=name; ret_type=ret_type; params=params; body=Empty} ->
      Func (newFunc(name, ret_type, params, Empty))
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->

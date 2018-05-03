@@ -10,7 +10,7 @@ let moduleExprAction = function
   | _ -> AddToMain
 
 let run = function
-  | Module lines ->
+  | Module {name=name;lines=lines} ->
      let rec loop_line main leave_lines move_lines lines =
        match lines with
        | [] ->
@@ -21,7 +21,7 @@ let run = function
                                   Return {node=Tuple [];coraltype=None} :: move_lines)) in
                Ast.Func (newFunc(".init", Type("Void"), [], body))
             | Some f -> f
-          in Module(main :: leave_lines |> List.rev)
+          in Module {name=name; lines=List.rev @@ main::leave_lines}
        | line :: xs ->
           match moduleExprAction line with
           | Noop -> loop_line main (line::leave_lines) move_lines xs

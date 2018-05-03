@@ -17,13 +17,19 @@ let rec type_to_constraint = function
   | Ast.Parameterized (s, p) -> Graph.Type (s, List.map type_to_constraint p)
   | Ast.Dotted items -> failwith "unhandled dotted type"
 
+let rec constraint_to_type = function
+  | Graph.Type(s, []) -> Ast.Type s
+  | Graph.Type(s, params) -> Ast.Parameterized(s, List.map constraint_to_type params)
+  | c -> failwith ("unhandled type" ^ Graph.cons_to_string c)
+
 let rec createGraph g node =
   match node with
-  | Module list as m ->
+  | Empty -> Graph.addTerm g "empty" Empty
+  | Module modinfo as m ->
      let fold (terms, g) a =
        let (t, g) = createGraph g a in
        (t::terms, g) in
-     let terms, gg = List.fold_left fold ([], g) list in
+     let terms, gg = List.fold_left fold ([], g) modinfo.lines in
      Graph.addTerm gg "module" m
   | Block list as block ->
      let blockterm, gg = Graph.addTerm g "block" block in
@@ -81,7 +87,7 @@ let rec createGraph g node =
      term, gg
   | IntLiteral i as inode ->
      let term, gg = Graph.addTerm g ("i" ^ i) inode in
-     let gg = Graph.constrain gg term (Graph.Type ("Int32", [])) in
+     let gg = Graph.constrain gg term (Graph.Type ("Int64", [])) in
      term, gg
   | Binop (op, lhs, rhs) as binop ->
      let term, gg = Graph.addTerm g ("op." ^ op) binop in
@@ -122,6 +128,28 @@ let rec createGraph g node =
      Printf.printf "createGraph: %s\n" (nodeName node);
      Graph.addTerm g (nodeName x) x
 
+let applySolution gg m =
+  Graph.TermMap.iter (fun term cons ->
+      match term.value with
+      | Func info ->
+         (* let show () = Printf.printf "%s (%s) --> %s\n"
+          *         (Ansicolor.as_color (Bold RED) term.name)
+          *         (Ast.nodeName term.value)
+          *         (Graph.cons_to_string cons) in *)
+         let show () = () in
+         (try
+            match constraint_to_type cons with
+            | Ast.Parameterized ("Func", params) -> info.ret_type <- List.hd @@ List.rev params
+            | _ -> show ()
+          with | e -> show ())
+      | Def p -> p.defType <- Some(constraint_to_type cons);
+      | Return p -> p.coraltype <- Some(constraint_to_type cons);
+      | _ ->
+         (* Printf.printf "%s (%s) --> %s\n" term.name
+          *   (Ast.nodeName term.value) (Graph.cons_to_string cons); *)
+         ()
+  ) gg.Graph.constraints
+
 let run m =
   let gg = Graph.empty in
 
@@ -131,12 +159,15 @@ let run m =
   let fold_op_is optype gg o =
     let op, gg = Graph.addTerm gg o Empty in
     Graph.constrain gg op optype in
-  let gg = List.fold_left (fold_op_is arith_op_type) gg ["+"; "*"; "-"; "/"] in
+  let gg = List.fold_left (fold_op_is arith_op_type) gg ["+"; "*"; "-"; "/"; "%"] in
   let gg = List.fold_left (fold_op_is bool_op_type) gg ["="; "<";">"; ">="; "<="; "!="] in
 
+  (* Ast.show m; *)
   let term, graph = createGraph gg m in
-  Graph.show graph;
+  (* Graph.show graph; *)
   let solution = Graph.solve graph in
-  Graph.show solution;
-  exit 0
+  (* Graph.show solution;
+   * flush stdout; *)
+  applySolution solution m;
+  (* Ast.show m; *)
   m

@@ -4,7 +4,7 @@ open LlvmBackend
 
 open OUnit
 
-let parse lexbuf =
+let parse name lexbuf =
   let m =
     try
       Grammar.main LexerInterface.token lexbuf
@@ -13,16 +13,16 @@ let parse lexbuf =
       let pos = lexbuf.lex_start_p in
       printf "%d(%d:%d)\n" pos.pos_cnum pos.pos_lnum pos.pos_bol;
       raise exc
-  in m
+  in (match m with | Module modinfo -> Ast.Module {modinfo with name=name} | x -> x)
   |> Multifunc.run
   |> Return_insert.run
   |> Init_func.run
   |> Name_resolver.run
   |> Type_resolver.run
 
-let parse_file filename = open_in filename |> Lexing.from_channel |> parse
+let parse_file filename = open_in filename |> Lexing.from_channel |> parse filename
 
-let parse_string x = Lexing.from_string x |> parse
+let parse_string x = Lexing.from_string x |> parse "module"
 
 let run = LlvmBackend.run
 

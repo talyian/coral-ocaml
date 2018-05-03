@@ -131,7 +131,7 @@ let test_funcalls_generic () =
   let thenblock, gg = Graph.addTerm gg "then" ENode in
   let elseblock, gg = Graph.addTerm gg "else" ENode in
 
-  let gg = Graph.constrain gg thenblock (Graph.Type ("Int1", [])) in
+  let gg = Graph.constrain gg thenblock (Graph.Type ("Int88", [])) in
   let gg = Graph.constrain gg elseblock (Graph.Call (Graph.Term fn.name, [Graph.Term n.name]))  in
   let gg = Graph.constrain gg ifblock (Graph.OneOf [Graph.Term thenblock.name;
                                                     Graph.Term elseblock.name]) in
@@ -142,6 +142,7 @@ let test_funcalls_generic () =
   Graph.showColor (5, 3, 2) gg;
   Graph.show @@ Graph.solve gg;
   ()
+    
 let () =
   test_assignment ();
   test_funcalls();

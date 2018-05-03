@@ -30,7 +30,7 @@ module GraphF =
              end) -> struct
 
   type configTy = { mutable debug: bool }
-  let config = { debug = true }
+  let config = { debug = false }
   type cons =
     | Free of int
     | Term of string
@@ -40,7 +40,7 @@ module GraphF =
     | AllOf of cons list
     | Member of cons * string
   let rec cons_to_string = function
-    | Free n -> "free." ^ string_of_int n
+    | Free n -> "τ" ^ string_of_int n
     | Term s -> "@" ^ s
     | Type (n, []) -> n
     | Type (n, p) ->
@@ -52,26 +52,30 @@ module GraphF =
     | Member(a, m) -> cons_to_string a ^ "." ^ m
 
   type term = { name: string; value: Node.t }
-  let term_name x= {name=x; value=Node.empty}
   module TermMap = Map.Make(struct type t = term let compare a b = compare a.name b.name end)
   module StringMap = Map.Make(String)
-  module StringSet = Set.Make(String)
   module IntMap = Map.Make(struct type t = int let compare = compare end)
+  module TermSet = Set.Make(struct type t = term let compare a b = compare a.name b.name end)
 
   type graph = {
       parent: graph option;
       terms: term StringMap.t;
+      active_terms: TermSet.t;
       constraints: cons TermMap.t;
   }
-  let empty = {terms=StringMap.empty; constraints=TermMap.empty; parent=None}
+  let empty = {terms=StringMap.empty;
+               constraints=TermMap.empty;
+               active_terms=TermSet.empty;
+               parent=None}
   let childOf parent = {empty with parent=Some(parent)}
 
   let showColor rgb graph =
-    graph.constraints
-    |> TermMap.iter (fun term cons ->
-           Printf.printf "%s :: %s\n"
-             (Ansicolor.as_rgb rgb @@ Printf.sprintf "%20s" term.name)
-             (cons_to_string cons))
+    let loop term cons =
+      let rgb = if TermSet.mem term graph.active_terms then rgb else (2, 2, 2) in
+      Printf.printf "%s :: %s\n"
+        (Ansicolor.as_rgb rgb @@ Printf.sprintf "%20s" term.name)
+        (cons_to_string cons) in
+    TermMap.iter loop graph.constraints
   let show = showColor (3,4,5)
 
   let rec findTerm graph name =
@@ -82,6 +86,14 @@ module GraphF =
        | Some(p) -> findTerm p name
        | None -> None
 
+  let rec term_by_name graphs x =
+    match graphs with
+    | [] -> failwith ("term_by_name: " ^  x)
+    | graph :: next ->
+       match findTerm graph x with
+       | Some(x) -> x
+       | _ -> term_by_name next x
+
   let rec findTermByValue graph node =
     match graph.terms
           |> StringMap.bindings
@@ -89,7 +101,7 @@ module GraphF =
              | name, {value=n} when Node.cmp n node = 0 && n <> Node.empty -> true
              | _ -> false) with
     | None ->
-       showColor (4, 0, 0) graph;
+       showColor (3, 2, 2) graph;
        failwith (Printf.sprintf "not found: (%s)" (Node.show node))
     | Some(a, b) -> b
   let addTerm graph name node =
@@ -106,19 +118,27 @@ module GraphF =
 
   (* After we create a new allof or oneof constraint,
    * we need to simplify it to keep it from exploding in size *)
-  let rec simplify term = function
+  let rec simplify term =
+    let noterm = List.filter ((<>) (Term term.name)) in
+    let uniq = List.sort_uniq compare in
+    let rec merge_ones tt = function
+      | OneOf x :: rest -> merge_ones (x @ tt) rest
+      | x :: rest -> merge_ones (x :: tt) rest
+      | [] -> (match tt with | [n] -> simplify term n | x -> OneOf x) in
+    let rec merge_alls tt = function
+      | AllOf x :: rest -> merge_alls (x @ tt) rest
+      | x :: rest -> merge_alls (x :: tt) rest
+      | [] -> (match tt with | [n] -> simplify term n | x -> AllOf x) in
+    function
     | (OneOf [n]) | (AllOf [n]) -> simplify term n
-    | OneOf list ->
-       (match list |> List.filter ((<>) (Term term.name)) |> List.sort_uniq compare with
-        | [n] -> simplify term n
-        | list -> OneOf list)
-    | AllOf list ->
-       (match list |> List.filter ((<>) (Term term.name)) |> List.sort_uniq compare with
-        | [n] -> simplify term n
-        | list -> AllOf list)
+    | OneOf list -> list |> noterm |> uniq |> merge_ones []
+    | AllOf list -> list |> noterm |> uniq |> merge_alls []
     | n -> n
 
   let constrain graph term cons =
+    if config.debug then
+      Printf.printf "%s: %s :: %s\n"
+        (Ansicolor.as_color (Bold GREEN) "Add ") term.name (cons_to_string cons);
     match cons with
     | Term tt when tt = term.name -> graph
     | _ ->
@@ -128,48 +148,63 @@ module GraphF =
          | Some (OneOf []) -> None
          | Some(AllOf list) -> Some(simplify term @@ AllOf (cons :: list))
          | Some(x) -> Some(simplify term @@ AllOf [cons; x]) in
-       { graph with constraints=TermMap.update term update graph.constraints}
+       { graph with
+         constraints=TermMap.update term update graph.constraints;
+         active_terms = TermSet.add term graph.active_terms}
 
   let remove_term (tt:term) graph =
-    {graph with constraints = TermMap.remove tt graph.constraints}
-
-  let replace_term_1 term replacement graph =
-    (* Printf.printf "Replacing %s with %s\n" term.name (cons_to_string cons); *)
-    let rec replace_func (tt:term) (tc:cons) =
-      match tc with
-      | Term s when s = term.name -> replacement
-      | Type (n, p) -> Type (n, List.map (replace_func tt) p)
-      | Call (callee, args) -> Call((replace_func tt) callee, List.map (replace_func tt) args)
-      | OneOf p -> simplify tt @@ OneOf (p |> List.map (replace_func tt))
-      | AllOf p -> simplify tt @@ AllOf (p |> List.map (replace_func tt))
-      | _ as f -> f in
-    {graph with constraints = graph.constraints |> TermMap.mapi replace_func}
-  let replace_term term cons graph = graph
-    |> replace_term_1 term cons
-    |> remove_term term
+    {graph with
+      constraints = TermMap.remove tt graph.constraints;
+      active_terms = TermSet.remove tt graph.active_terms}
 
   (* when replacing terms in "inactive", make them active *)
-  let activate_replace_term term cons active inactive =
-    let rec dependsOn (subject:term) (tt:term) = function
-      | Term s when s = subject.name -> true
-      | Type (n, p) -> List.exists (dependsOn subject term) p
-      | Call (a, b) -> List.exists (dependsOn subject term) (a :: b)
-      | OneOf p -> List.exists (dependsOn subject term) p
-      | AllOf p -> List.exists (dependsOn subject term) p
-      | _ -> false in
-    let inactive_1, inactive_2 = TermMap.partition (dependsOn term) inactive.constraints in
-    inactive_1 |> TermMap.iter (fun tt tc  ->
-                      Printf.printf "Activating %s :: %s because of %s\n"
-                        tt.name
-                        (cons_to_string tc)
-                        term.name)
-    ;
-    let active =
-      let combine key a b = Some(AllOf [a; b]) in
-      let constraints = TermMap.union combine inactive_1 active.constraints in
-      {active with constraints = constraints} in
-    let inactive = {inactive with constraints = inactive_2} in
-    replace_term term cons active, replace_term term cons inactive
+  let activate_replace_term term cons graph =
+    (* Replaces subject->replacement in a given constraint,
+       returning a new constraint and a replacement count. *)
+    let rec doReplace subject replacement =
+      let recurse x = doReplace subject replacement x in
+      let rec recurseList = function
+        | [] -> 0, []
+        | x :: rest ->
+           let c, x2 = recurse x in
+           let d, x3 = recurseList rest in
+           c + d, (x2 :: x3) in
+      function
+      | Term s when s = subject.name -> 1, replacement
+      | Type (n, p) ->
+         let c, p2 = recurseList p in c, Type(n, p2)
+      | Call (a, b) ->
+         let c, p2 = recurse a in
+         let d, p3 = recurseList b in
+         c + d, Call(p2, p3)
+      | OneOf p -> let c, p2 = recurseList p in c, simplify subject @@ OneOf p2
+      | AllOf p -> let c, p2 = recurseList p in c, simplify subject @@ AllOf p2
+      | n -> 0, n in
+
+    let fold_replace key target (count, actives, constraints) =
+      let c, new_cons = doReplace term cons target in
+      let new_actives = match c with | 0 -> actives | n -> TermSet.add key actives in
+      (count + c, new_actives, TermMap.add key new_cons constraints) in
+    let cc, actives, constraints =
+      TermMap.fold fold_replace graph.constraints (0, TermSet.empty, TermMap.empty) in
+    cc, { graph with
+      constraints=constraints;
+      active_terms=TermSet.remove term @@ TermSet.union graph.active_terms actives
+    }
+    (* let inactive_1, inactive_2 = TermMap.partition (dependsOn term) inactive.constraints in
+     * if config.debug then
+     *   inactive_1 |> TermMap.iter (fun tt tc  ->
+     *                   Printf.printf "Activating %s :: %s because of %s\n"
+     *                     tt.name
+     *                     (cons_to_string tc)
+     *                     term.name)
+     * ;
+     * let active =
+     *   let combine key a b = Some(AllOf [a; b]) in
+     *   let constraints = TermMap.union combine inactive_1 active.constraints in
+     *   {active with constraints = constraints} in
+     * let inactive = {inactive with constraints = inactive_2} in
+     * replace_term term cons active, replace_term term cons inactive *)
 
   (* add : cons -> cons option -> cons
      Adds two constraints, merging AllOfs to avoid nesting *)
@@ -211,8 +246,8 @@ module GraphF =
          unify_collect graph @@ List.map2 (unify graph tt) ap bp
        else
          Fail (Printf.sprintf "mismatch: %s, %s" a b)
-    | Term x, Term y -> Success (graph, [term_name x, Term y])
-    | (Term x, (Type _ as y)) | (Type _ as y, Term x) -> Success (graph, [term_name x, y])
+    | Term x, Term y -> Success (graph, [term_by_name [graph] x, Term y])
+    | (Term x, (Type _ as y)) | (Type _ as y, Term x) -> Success (graph, [term_by_name [graph] x, y])
     | (Type _ as cons1, Call (Type("Func", params), args))
     | (Term _ as cons1, Call (Type("Func", params), args)) ->
        let arg1 = args @ [cons1] in
@@ -253,62 +288,89 @@ module GraphF =
         | _ -> Printf.printf "multiple options for term %s\n" tt.name;
                Defer [tt, cons1; tt, call])
     | a, b ->
-       Printf.printf "Deferring: %s <> %s\n" (cons_to_string a) (cons_to_string b);
+       if config.debug then
+         Printf.printf "Deferring: %s <> %s\n"
+           (cons_to_string a)
+           (cons_to_string b);
        Defer [tt, a; tt, b]
 
-  let rec step graph shelf term cons =
-    Printf.printf "step: %s :: %s\n" term.name (cons_to_string cons);
-    let show_pair tt tc =
-      Printf.printf "Adding: %s :: %s\n" tt.name (cons_to_string tc) in
-    let handle_unify_result =function
+  let rec step graph term cons =
+    if config.debug then Printf.printf "step: %s :: %s\n" term.name (cons_to_string cons);
+    let handle_unify_result = function
       | Fail s -> failwith s
       | Success (graph, items) ->
-         let graph = {graph with constraints = TermMap.remove term graph.constraints} in
-         let graph = List.fold_left (fun gg (t, c) ->
-                         show_pair t c;
-                         constrain gg t c) graph items in
-         1, graph, shelf
-      | Defer (items) ->
+         (* let graph = {graph with constraints = TermMap.remove term graph.constraints} in *)
          let graph = List.fold_left (fun gg (t, c) -> constrain gg t c) graph items in
-         0, graph, shelf in
+         let newterms = List.map fst items |> TermSet.of_list in
+         1, {graph with active_terms=TermSet.union graph.active_terms newterms}
+      | Defer (items) ->
+         (* let graph = List.fold_left (fun gg (t, c) -> constrain gg t c) graph items in *)
+         0, graph in
 
     match cons with
-    | Type (name, params) as t ->
-       let gg, ss = activate_replace_term term t graph shelf in
-       1, gg, (shelve term t ss)
-    | Term n as t ->
-       let gg, ss = activate_replace_term term t graph shelf in
-       1, gg, (shelve term t ss)
-    | AllOf(n :: []) | OneOf (n :: []) -> step graph shelf term n
-    | OneOf n as t ->
-       1, graph |> replace_term term t, shelve term t shelf
-    | AllOf(Type _ as ty :: rest) ->
-       let uni = unify_collect graph @@ List.map (unify graph term ty) rest in
-       handle_unify_result uni
-    | AllOf(Term n as nterm :: rest) ->
-       (* when a == b && other things, b &= other things and get rid of a *)
-       (* replace all references to term with n *)
-       let graph = replace_term term nterm graph in
+    | Type (name, params) as t -> activate_replace_term term t graph
+    | Term n as t -> activate_replace_term term t graph
+    | AllOf(n :: []) | OneOf (n :: []) -> step graph term n
+    | OneOf n as t -> activate_replace_term term (simplify term t) graph
+    | AllOf items ->
+       (match List.find_opt (function | Term _ -> true | Type _ -> true | _ -> false) items with
+        | Some(Type(tt, tp) as cc) ->
+           let rest = List.filter ((<>) cc) items in
+           let graph = remove_term term graph in
+           let c, graph = activate_replace_term term (Type(tt, tp)) graph in
+
+           let cons_list = (Term term.name :: rest) in
+           let unifold graph cons =
+             match unify graph term (Type (tt, tp)) cons with
+             | Fail s -> graph
+             | Success (gg, items) -> List.fold_left (fun gg (t, c) -> constrain gg  t c) gg items
+             | Defer items -> graph
+           in
+           let graph = List.fold_left unifold graph cons_list in
+           c, graph
+           (* handle_unify_result
+            * @@ unify_collect graph
+            * @@ List.map (unify graph term (Type(tt, tp))) (Term term.name :: rest) *)
+        | Some(Term n as nterm) ->
+           let rest = List.filter ((=) nterm) items in
+           let graph = remove_term term graph in
+           let graph = constrain graph term nterm in
+           (* when a == b && other things, b &= other things and get rid of a *)
+           (* replace all references to term with n *)
+           let c, graph = activate_replace_term term nterm graph in
+           let n_term = term_by_name [graph] n in
+           let folder graph cons = constrain graph n_term cons in
+           let graph = List.fold_left folder (graph) rest in
+           1, graph
+        | _ -> 0, graph)
+    (* | AllOf(Type (tt, tp) :: rest) -> *)
+    (* | AllOf(Term n as nterm :: rest) -> *)
        (* add remaining constraints to n *)
-       let update_n_term x = Some (simplify term @@ addcons (AllOf rest) x) in
-       let constraints = TermMap.update (term_name n) update_n_term graph.constraints in
-       1, {graph with constraints=constraints}, shelve term nterm shelf
+       (* let update_n_term x = Some (simplify term @@ addcons (AllOf rest) x) in
+        *
+        * let constraints =
+        *   TermMap.update
+        *     (term_by_name [graph] n)
+        *     update_n_term
+        *     graph.constraints in
+        * 1, {graph with constraints=constraints}, shelve term nterm *)
     | cons -> handle_unify_result @@ unify graph term (Term term.name) cons
 
-  let finalize graph dependents =
-    let rec find_type terms term =
-      match TermMap.find_opt term dependents.constraints with
-      | Some(Type _ as t) -> Some t
-      | Some(Term m) ->
-         (match StringSet.find_opt m terms with
-          | None -> find_type (StringSet.add m terms) (term_name m)
-          | Some(m) -> Some (Term m))
-      | _ -> None in
-    let rec update_cons = function
-      | Term n -> (match find_type StringSet.empty (term_name n) with | None -> Term n | Some x -> x)
-      | Type(a, ap) -> Type(a, List.map update_cons ap)
-      | x -> x in
-    {dependents with constraints = TermMap.map update_cons dependents.constraints }
+  let finalize graph =
+    (* let rec find_type terms term =
+     *   match TermMap.find_opt term dependents.constraints with
+     *   | Some(Type _ as t) -> Some t
+     *   | Some(Term m) ->
+     *      (match StringSet.find_opt m terms with
+     *       | None -> find_type (StringSet.add m terms) (term_by_name [graph;dependents] m)
+     *       | Some(m) -> Some (Term m))
+     *   | _ -> None in
+     * let rec update_cons = function
+     *   | Term n -> (match find_type StringSet.empty (term_by_name [graph;dependents] n) with | None -> Term n | Some x -> x)
+     *   | Type(a, ap) -> Type(a, List.map update_cons ap)
+     *   | x -> x in
+     * {dependents with constraints = TermMap.map update_cons dependents.constraints } *)
+    graph
   let solve graph =
     (* "Solving" a graph consists of iteratively removing constraints:
        1. term :: type foo can be removed via substitution
@@ -316,30 +378,39 @@ module GraphF =
        3: term :: Call(Type("Func", params), args) can be removed via
             pairwise reduction of params against (args @ [ term]) *)
 
+    let graph =
+      {graph with active_terms = graph.constraints
+                                 |> TermMap.bindings
+                                 |> List.map fst
+                                 |> TermSet.of_list} in
     (* solve_step iterates through all the active terms once *)
-    let rec solve_step n (reduced:graph) (dependent:graph) =
+   let rec solve_step n graph =
       (* let merge term a b = match a, b with | a, b -> Some (AllOf [a; b]) in *)
-      let step_once term cons (i, g1, g2) =
-        let cons = TermMap.find term g1.constraints in
-        let j, g1, g2 = step g1 g2 term cons in
-        (* if config.debug then (
-         *   Printf.printf "step: %s = %s\n" term.name (cons_to_string cons);
-         *   showColor (5, 5, 5) g1;
-         *   showColor (5, 2, 5) g2); *)
-        i + j, g1, g2 in
-      if config.debug then begin
-        (Printf.printf "------------------------------------------------------------\n";
-         showColor (5, 3, 3) reduced;
-         showColor (2, 5, 3) dependent);
-        Printf.printf "[%d]\n" n;
-        flush stdout;
-      end;
-      match TermMap.fold step_once reduced.constraints (0, reduced, dependent) with
-      | 0, a, b -> (0, a, b)
-      | other, a, b ->
-         Printf.printf "ct: [%d]\n" other;
-         if n > 0 then solve_step (n - 1) a b else -1, a, b
+      let step_once term (i, g1) =
+        match TermMap.find_opt term g1.constraints with
+        | None -> 0, g1
+        | Some(cons) ->
+           let j, g1 = step g1 term cons in
+           (* if config.debug then (
+            *   Printf.printf "step: %s = %s\n" term.name (cons_to_string cons);
+            *   showColor (5, 5, 5) g1;
+            *   showColor (5, 2, 5) g2); *)
+           i + j, g1
+      in
+      if config.debug then
+        begin
+          Printf.printf "------------------------------------------------------------\n";
+          showColor (5, 2, 1) graph;
+          Printf.printf "[%d]\n" n;
+          flush stdout;
+        end;
+      match TermSet.fold step_once graph.active_terms (0, graph) with
+      | 0, b -> (0, b)
+      | other, b ->
+         if config.debug then Printf.printf "ct: [%d]\n" other;
+         if n > 0 then solve_step (n - 1) b else -1, b
     in
-    let i, g1, g2 = solve_step 10 graph empty
-    in finalize g1 g2
+     let i, g1 = solve_step 10 graph
+    in finalize g1
+
 end

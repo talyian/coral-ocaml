@@ -25,12 +25,12 @@ let rec llvmType context = function
      | "Int8" -> Llvm.i8_type context
      | "Int32" -> Llvm.i32_type context
      | "Int64" -> Llvm.i64_type context
-     | "Float64" -> Llvm.double_type context
+     | "Float32" -> Llvm.float_type context
      | "Float64" -> Llvm.double_type context
      | "Ptr" -> Llvm.pointer_type (Llvm.i8_type context)
      | "String" -> Llvm.pointer_type (Llvm.i8_type context)
      | "Tuple" -> Llvm.void_type context
-     | _ -> Printf.eprintf "Unknown Type: '%s'\n" s; Llvm.i64_type context
+     | _ -> failwith s;
      )
   | Parameterized(name, params) ->
      (match name with
@@ -44,14 +44,15 @@ let rec llvmType context = function
                 |> List.map (llvmType context)
                 |> Array.of_list)
           | [] -> failwith "function: no return type!")
-      | _ -> Printf.eprintf "Unknown Type: '%s'\n" (as_rgb (5, 1, 1) name); Llvm.i64_type context
+      | _ -> failwith name;
      )
   | _ -> failwith "Unknown type"
 
+
 let rec run1 llvalues = function
-  | Module lines ->
+  | Module {name=name;lines=lines} ->
      let lvContext = Llvm.global_context() in
-     let lvModule = Llvm.create_module lvContext "module" in
+     let lvModule = Llvm.create_module lvContext name in
      let rec looper llvalues = (function
        | [] ->
           lvModule
@@ -94,14 +95,14 @@ let rec run1 llvalues = function
                               llvalues=(AstMap.add f llfunc llvalues)
                             } f));
               looper (AstMap.add f llfunc llvalues) xs
-           | _ -> failwith "oops 2")) in looper llvalues lines
+           | x -> failwith("unrecognized module item: " ^ (Ast.nodeName x)))) in looper llvalues lines
   | _ -> failwith "oops 1"
 
 and run_func context = function
   | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
      let rec loop i (Def p) =
        match p.defType with
-       | None -> failwith "def has no type"
+       | None -> failwith (Format.sprintf "%s: def [%s] has no type" name p.name)
        | Some(def_type) ->
            let lltype = llvmType context.context def_type in
            let lldef = Llvm.param context.func i in
@@ -149,7 +150,11 @@ and run_func context = function
      if Llvm.type_of lval = Llvm.double_type context.context then
          (match op with
          | "<" -> Llvm.build_fcmp Fcmp.Ult lval rval "" context.builder
+         | "<=" -> Llvm.build_fcmp Fcmp.Ule lval rval "" context.builder
+         | ">" -> Llvm.build_fcmp Fcmp.Ugt lval rval "" context.builder
+         | ">=" -> Llvm.build_fcmp Fcmp.Uge lval rval "" context.builder
          | "=" -> Llvm.build_fcmp Fcmp.Ueq lval rval "" context.builder
+         | "!=" -> Llvm.build_fcmp Fcmp.Une lval rval "" context.builder
          | "+" -> Llvm.build_fadd lval rval "" context.builder
          | "-" -> Llvm.build_fsub lval rval "" context.builder
          | "*" -> Llvm.build_fmul lval rval "" context.builder
@@ -159,6 +164,10 @@ and run_func context = function
      else
          (match op with
          | "<" -> Llvm.build_icmp Icmp.Slt lval rval "" context.builder
+         | "<=" -> Llvm.build_icmp Icmp.Sle lval rval "" context.builder
+         | ">" -> Llvm.build_icmp Icmp.Sgt lval rval "" context.builder
+         | ">=" -> Llvm.build_icmp Icmp.Sge lval rval "" context.builder
+         | "!=" -> Llvm.build_icmp Icmp.Ne lval rval "" context.builder
          | "=" -> Llvm.build_icmp Icmp.Eq lval rval "" context.builder
          | "+" -> Llvm.build_add lval rval "" context.builder
          | "-" -> Llvm.build_sub lval rval "" context.builder
@@ -216,6 +225,7 @@ and run_func context = function
      let conststr = Llvm.const_string context.context s in
      let globstr = Llvm.build_global_stringptr s "" context.builder in
      globstr
+  | Tuple []
   | Empty -> Llvm.const_int (Llvm.i32_type context.context) 0
   | Let (var, value) as letnode ->
      (match var.varType with
@@ -235,9 +245,9 @@ and run_func context = function
 
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
+  Llvm.string_of_llmodule llmodule |> print_endline;
+  flush stdout;
   Llvm_analysis.assert_valid_module llmodule;
-
-  (* Llvm.string_of_llmodule llmodule |> print_endline; *)
 
   let passmgrbuilder = Llvm_passmgr_builder.create () in
   let module_passmgr = Llvm.PassManager.create () in

@@ -27,12 +27,12 @@ let rec multifunc deleted scope = function
 
   | Multifunc (name, funcs) as mf ->
      [mf]
-  | Module nodes ->
-     let nodes = nodes
+  | Module modinfo ->
+     let nodes = modinfo.lines
                  |> List.map (multifunc deleted scope)
                  |> List.concat
                  |> List.filter (fun x -> not (NodeSet.mem x !deleted)) in
-     [Module nodes]
+     [Module {modinfo with lines=nodes}]
   | n -> [n]
 
 let run = function

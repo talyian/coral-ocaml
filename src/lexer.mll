@@ -6,6 +6,12 @@ type lexContext = {
   mutable tokenqueue: Grammar.token list;
 }
 
+let parse_operator tok =
+  match tok with
+  | "+" | "-" -> Grammar.OPERADD(tok)
+  | "*" | "/" | "%" -> Grammar.OPERMUL(tok)
+  | "=" | "<" | ">" | "!=" | "<=" | ">=" -> Grammar.OPERCMP(tok)
+  | _ -> Grammar.OPERATOR(tok)
 }
 rule coral_token ctx = parse
   | ' ' { coral_token ctx lexbuf }
@@ -46,7 +52,7 @@ rule coral_token ctx = parse
        | _ -> []
      ))
   }
-  | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [Grammar.OPERATOR(tok)] }
+  | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }
   | "..." { [Grammar.ELLIPSIS] }
   | ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok { [Grammar.IDENTIFIER(tok)] }
   | _ as tok { [Grammar.OTHER(tok)] }

@@ -32,8 +32,16 @@ type 'a funcInfo = {
   params: 'a list;
   body: 'a
 }
-and node =
-  | Module of (node list)
+
+type 'a moduleInfo = {
+  mutable name: string;
+  lines: 'a list;
+}
+
+let make_module lines = {name="module"; lines=lines}
+
+type node =
+  | Module of node moduleInfo
   | Func of node funcInfo
   | Multifunc of string * (node funcInfo) list
   | Comment of (string)
@@ -112,7 +120,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
   | _ ->
     if not is_inline then show_indent indent;
     (match node with
-    | Module (lines) ->
+    | Module {lines=lines} ->
        List.iter (show1 indent is_inline) lines
     | Def x ->
        (match x.defType with

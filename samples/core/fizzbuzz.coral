@@ -1,1 +1,17 @@
-func printf: Void(...)
+func printf: Void(fmt:Ptr, ...)
+
+func fizzbuzz(n):
+  if (n % 15) = 0:
+    printf("fizzbuzz\n")
+  else if n % 3 = 0:
+    printf("fizz ")
+  else if (n % 5) = 0:
+    printf("buzz ")
+  else:
+    printf("%ld ", n)
+
+func loop (a, b):
+  fizzbuzz a
+  if a < b: loop(a + 1, b)
+
+loop (1, 50)

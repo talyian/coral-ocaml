@@ -1,20 +1,11 @@
-func printf : Void (p:Ptr, ...)
-# Temporarily, we are hard-coding the arithmetic types as T, T -> T
-# and comparison types as T, T -> Int1
+func printf: Void(fmt:Ptr, ...)
 
-func factorial (n):
+func factorial(n):
   if n < 2:
     1
   else:
     n * factorial(n - 1)
 
-# printf("%4ld! = %ld\n", 6, factorial 6)
-# printf("%4ld! = %ld\n", 10, factorial 10)
-# printf("%4ld! = %ld\n", 15, factorial 15)
-
-# add: T -> U -> T
-# sub: T -> U -> T
-
-# let z = add x y
-# let f = sub @ x
-# let xx = f y
+printf ("%5ld! = %ld\n", 6, factorial(6))
+printf ("%5ld! = %ld\n", 8, factorial(8))
+printf ("%5ld! = %ld\n", 14, factorial(14))
