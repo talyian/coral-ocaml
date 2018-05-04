@@ -131,9 +131,14 @@ let rec createGraph g node =
   | TupleDef info ->
      let fold_field (terms, gg) (fname, ftype) =
        let field_term, graph =
-         let field_term_name = "(MemberType) " ^ info.name ^ "::" ^ fname in
-         Graph.addTerm gg field_term_name Empty in
+         let name = "(MemberType) " ^ info.name ^ "::" ^ fname in
+         Graph.addTerm gg name Empty in
+       let index_term, graph =
+         let name = "(MemberIndex) " ^ info.name ^ "::" ^ fname in
+         Graph.addTerm graph name Empty in
+       let index = string_of_int @@ List.length terms in
        let graph = Graph.constrain graph field_term (type_to_constraint ftype) in
+       let graph = Graph.constrain graph index_term (Graph.Type (index, [])) in
        field_term :: terms, graph in
      let fields, graph = List.fold_left fold_field ([], g) info.fields in
      let tuple_term, graph = Graph.addTerm graph info.name (TupleDef info) in
@@ -151,9 +156,10 @@ let rec createGraph g node =
   | Member mem as member ->
      let baseterm, gg = createGraph g mem.base in
      let term, gg = Graph.addTerm gg (baseterm.name ^ "::" ^ mem.memberName) member in
+     let iterm, gg = Graph.addTerm gg (term.name ^ ".idx") member in
      let gg =
        let base = Graph.Term baseterm.name in
-       let cons = Graph.Member (base, mem.memberName) in
+       let cons = Graph.Member (base, mem.memberName, Graph.Term iterm.name) in
        Graph.constrain gg term cons in
      term, gg
   | x ->
@@ -176,7 +182,12 @@ let applySolution gg m =
           with | e -> show ())
       | Def p -> p.defType <- Some(constraint_to_type cons);
       | Return p -> p.coraltype <- Some(constraint_to_type cons);
-      | Let (var, expr) as letexpr -> var.varType <- Some(constraint_to_type cons)
+      | Let (var, expr) -> var.varType <- Some(constraint_to_type cons)
+      | Member mem ->
+         (match cons with
+         | Graph.Type("Index", [Graph.Type(n, [])]) ->
+            mem.memberIndex <- int_of_string n
+         | _ -> (* don't need to set type on member *)())
       (* ignore known type nodes *)
       | TupleDef _
       | Block _

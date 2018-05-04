@@ -38,7 +38,7 @@ module GraphF =
     | Call of cons * cons list
     | OneOf of cons list
     | AllOf of cons list
-    | Member of cons * string
+    | Member of cons * string * cons
   let rec cons_to_string = function
     | Free n -> "τ" ^ string_of_int n
     | Term s -> "@" ^ s
@@ -48,8 +48,11 @@ module GraphF =
     | Call (a, p) ->
        cons_to_string a ^ "(" ^ (String.concat ", " (List.map cons_to_string p)) ^ ")"
     | OneOf p -> "(" ^ (String.concat "|" (List.map cons_to_string p)) ^ ")"
-    | AllOf p -> "(" ^ (String.concat " & " (List.map cons_to_string p)) ^ ")"
-    | Member(a, m) -> "(" ^ cons_to_string a ^ ")->" ^ m
+    | AllOf p -> "(" ^ (String.concat " &\n\t " (List.map cons_to_string p)) ^ ")"
+    | Member(a, m, index) ->
+       let str_base = cons_to_string a in
+       let str_index =cons_to_string index in
+       "(" ^ str_base ^ "[" ^ str_index ^ "])->" ^ m
 
   type term = { name: string; value: Node.t }
   module TermMap = Map.Make(struct type t = term let compare a b = compare a.name b.name end)
@@ -179,9 +182,9 @@ module GraphF =
          c + d, Call(p2, p3)
       | OneOf p -> let c, p2 = recurseList p in c, simplify subject @@ OneOf p2
       | AllOf p -> let c, p2 = recurseList p in c, simplify subject @@ AllOf p2
-      | Member (base, path) ->
+      | Member (base, path, index) ->
          let count, newbase = recurse base in
-         count, Member(newbase, path)
+         count, Member(newbase, path, index)
       | n -> 0, n in
 
     let fold_replace key target (count, actives, constraints) =
@@ -290,11 +293,36 @@ module GraphF =
         | [single], _ -> single
         | _ -> Printf.printf "multiple options for term %s\n" tt.name;
                Defer [tt, cons1; tt, call])
-    | (Term tname, Member(Type (typename, []), membername)) ->
+    | (Type _ as y, Member(Type (typename, []), membername, index_cons)) ->
        let infokey = "(MemberType) " ^ typename ^ "::" ^ membername in
-       (match findTerm graph infokey with
-        | None -> failwith ("member lookup failed on type " ^ infokey)
-        | Some(t) -> Success (graph, [term_by_name [graph] tname, Term t.name]))
+       let indexkey = "(MemberIndex) " ^ typename ^ "::" ^ membername in
+       (match findTerm graph infokey, findTerm graph indexkey with
+        | Some(info), Some(idx_ordinal_term) ->
+           let graph =
+             match index_cons with
+             | Term index_term ->
+                let indexterm = Type ("Index", [Term idx_ordinal_term.name]) in
+                let graph = constrain graph (term_by_name [graph] index_term) indexterm in
+                {graph with active_terms=TermSet.add idx_ordinal_term graph.active_terms}
+             | _ -> failwith "unknown index holder" in
+           unify graph tt (Term info.name) y
+        | _ -> failwith ("member lookup failed on type " ^ infokey))
+    | (Term tname, Member(Type (typename, []), membername, index_cons)) ->
+       let infokey = "(MemberType) " ^ typename ^ "::" ^ membername in
+       let indexkey = "(MemberIndex) " ^ typename ^ "::" ^ membername in
+       (match findTerm graph infokey, findTerm graph indexkey with
+        | Some(t), Some(idx_ordinal_term) ->
+           let term = term_by_name [graph] tname in
+           let graph =
+             match index_cons with
+             | Term index_term ->
+                let indexterm = Type ("Index", [Term idx_ordinal_term.name]) in
+                constrain graph (term_by_name [graph] index_term) indexterm
+             | _ -> failwith "unknown index holder" in
+           let graph = {graph with active_terms= TermSet.add idx_ordinal_term graph.active_terms}
+           in
+           Success (graph, [term, Term t.name])
+        | _ -> failwith ("member lookup failed on type " ^ infokey))
     | a, b ->
        if config.debug then
          Printf.printf "Deferring: %s <> %s\n"

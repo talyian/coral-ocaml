@@ -206,9 +206,10 @@ and run_func context =
   | Call (Var {target=Some(TupleDef tuple)}, args) ->
      (match Llvm.type_by_name context.llmodule tuple.name with
       | Some(lltupletype) ->
-         let fieldloop (i, lval) f =
+         (* start with Llvm.undef and fold into a fully defined struct *)
+         let fieldloop (i, structval) f =
            let value = run_func context f in
-           i + 1, Llvm.build_insertvalue lval value i "" context.builder in
+           i + 1, Llvm.build_insertvalue structval value i "" context.builder in
          snd @@ List.fold_left fieldloop (0, Llvm.undef lltupletype) args
       | None -> failwith ("unknown type" ^ tuple.name))
   | Call (callee, args) ->
