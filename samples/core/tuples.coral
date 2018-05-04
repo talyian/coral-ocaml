@@ -6,8 +6,8 @@ func length2 (v:vector3d):
   v.x * v.x + v.y * v.y + v.z * v.z
 
 let v = vector3d(2.0, 3.0, 6.0)
-
-printf("%f, %f, %f: ", v.x, v.y, v.z)
+printf ("hi, %f, %f, %f\n", v.x, v.y, v.z)
+printf ("hello, %f\n", length2 v)
 
 # func sqrt: Float64 (n:Float64)
 # func sqrt: Float32 (n:Float32)

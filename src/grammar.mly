@@ -112,7 +112,7 @@ typedef
 
 member
 : base=expr_atom DOT member=IDENTIFIER
-  { { base=base; memberName=member; basetype=Type ""; memberIndex= -1} }
+  { { base=base; memberName=member; basetype=Type ""; memberIndex=0} }
 
 tuple_def
 : TYPE name=IDENTIFIER EQ LBRACE fields=separated_list(COMMA, tuple_field) RBRACE

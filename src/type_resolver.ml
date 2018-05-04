@@ -176,9 +176,14 @@ let applySolution gg m =
           with | e -> show ())
       | Def p -> p.defType <- Some(constraint_to_type cons);
       | Return p -> p.coraltype <- Some(constraint_to_type cons);
+      | Let (var, expr) as letexpr -> var.varType <- Some(constraint_to_type cons)
+      (* ignore known type nodes *)
+      | TupleDef _
+      | Block _
+      | FloatLiteral _ | IntLiteral _ | Empty _ -> ()
       | _ ->
-         (* Printf.printf "%s (%s) --> %s\n" term.name
-          *   (Ast.nodeName term.value) (Graph.cons_to_string cons); *)
+         Printf.printf "%s (%s) --> %s\n" (Ansicolor.as_color (Bold CYAN) term.name)
+           (Ast.nodeName term.value) (Graph.cons_to_string cons);
          ()
   ) gg.Graph.constraints
 
