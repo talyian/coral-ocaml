@@ -7,6 +7,7 @@ let moduleExprAction = function
   | Module _ -> Noop
   | Func {name=name; ret_type=rettype} when name == ".init" -> IsMain
   | Func _ -> Noop
+  | TupleDef _ -> Noop
   | _ -> AddToMain
 
 let run = function

@@ -43,7 +43,7 @@ let rec createGraph g node =
            let (t, g) = createGraph g a in
            (t::terms, g) in
          let terms, gg = List.fold_left fold ([], gg) list in
-         let gg = Graph.constrain gg blockterm (Graph.Term (List.hd @@ List.rev terms).name) in
+         let gg = Graph.constrain gg blockterm (Graph.Term (List.hd terms).name) in
          blockterm, gg)
   | Func fdata as func ->
      let fold (terms, gg1) param =
@@ -89,6 +89,10 @@ let rec createGraph g node =
      let term, gg = Graph.addTerm g ("i" ^ i) inode in
      let gg = Graph.constrain gg term (Graph.Type ("Int64", [])) in
      term, gg
+  | FloatLiteral i as inode ->
+     let term, gg = Graph.addTerm g ("f" ^ i) inode in
+     let gg = Graph.constrain gg term (Graph.Type ("Float64", [])) in
+     term, gg
   | Binop (op, lhs, rhs) as binop ->
      let term, gg = Graph.addTerm g ("op." ^ op) binop in
      let lterm, gg = createGraph gg lhs in
@@ -123,6 +127,34 @@ let rec createGraph g node =
   | StringLiteral s as snode ->
      let term, gg = Graph.addTerm g ("s" ^ Ast.string_name_escape s) snode in
      let gg = Graph.constrain gg term (Graph.Type ("String", [])) in
+     term, gg
+  | TupleDef info ->
+     let fold_field (terms, gg) (fname, ftype) =
+       let field_term, graph =
+         let field_term_name = "(MemberType) " ^ info.name ^ "::" ^ fname in
+         Graph.addTerm gg field_term_name Empty in
+       let graph = Graph.constrain graph field_term (type_to_constraint ftype) in
+       field_term :: terms, graph in
+     let fields, graph = List.fold_left fold_field ([], g) info.fields in
+     let tuple_term, graph = Graph.addTerm graph info.name (TupleDef info) in
+     let graph =
+       let field_types = List.map (fun (t:Graph.term) -> Graph.Term t.name) fields in
+       let ret_type = Graph.Type (info.name, []) in
+       let constructor_type = Graph.Type("Func", field_types @ [ret_type]) in
+       Graph.constrain graph tuple_term constructor_type in
+     tuple_term, graph
+  | Let (var, rhs) as letexpr ->
+     let value, gg = createGraph g rhs in
+     let term, gg = Graph.addTerm gg var.name letexpr in
+     let gg = Graph.constrain gg term (Term value.name) in
+     term, gg
+  | Member mem as member ->
+     let baseterm, gg = createGraph g mem.base in
+     let term, gg = Graph.addTerm gg (baseterm.name ^ "::" ^ mem.memberName) member in
+     let gg =
+       let base = Graph.Term baseterm.name in
+       let cons = Graph.Member (base, mem.memberName) in
+       Graph.constrain gg term cons in
      term, gg
   | x ->
      Printf.printf "createGraph: %s\n" (nodeName node);

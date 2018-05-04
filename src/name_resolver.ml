@@ -65,6 +65,10 @@ let rec run1 scope = function
   | Tuple t as x ->
      let scope = List.fold_left (fun s p -> fst (run1 s p)) scope t in
      scope, x
+  | TupleDef def as tuple ->
+     let scope = addName def.name tuple scope in scope, tuple
+  | Member mem as member ->
+     let scope, _ = run1 scope mem.base in scope, member
   | Return {node=v} as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
   | x ->

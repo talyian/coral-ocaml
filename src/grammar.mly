@@ -9,14 +9,10 @@ open Ast
 %token <char> OTHER
 %token <int> NEWLINE
 %token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
-%token LPAREN RPAREN COLON INDENT DEDENT
-%token EQ
+%token LPAREN RPAREN COLON LBRACE RBRACE LBRACKET RBRACKET
+%token INDENT DEDENT TYPE
+%token EQ DOT
 
-(*
-%left PLUS MINUS
-%left TIMES DIV
-%nonassoc UMINUS
-*)
 %start main
 %token EOF
 %type <Ast.node> expr line block main
@@ -45,6 +41,7 @@ line
   | RETURN NEWLINE { Return {node=Tuple [];coraltype=None} }
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
+  | e=tuple_def { TupleDef e }
 
 ifexpr
   : IF cond=expr2 ifbody=block_or_line { If(cond, ifbody, Empty) }
@@ -58,6 +55,7 @@ lines
 
 block
   : COLON NEWLINE INDENT lines=lines DEDENT { Block(lines) }
+
 block_or_line
   : e=block { e }
   | COLON e=expr NEWLINE { e }
@@ -69,7 +67,7 @@ expr_atom
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
   | e=STRING { StringLiteral e }
   | LPAREN e=expr2 RPAREN { e }
-
+  | e=member { Member e }
 (* Higher Precedence than operators *)
 expr_op_unit
   : e=expr_atom { e }
@@ -111,3 +109,14 @@ non_empty_paramlist
 typedef
   : e=IDENTIFIER { Type e }
   | ELLIPSIS { Type "..." }
+
+member
+: base=expr_atom DOT member=IDENTIFIER
+  { { base=base; memberName=member; basetype=Type ""; memberIndex= -1} }
+
+tuple_def
+: TYPE name=IDENTIFIER EQ LBRACE fields=separated_list(COMMA, tuple_field) RBRACE
+  { {name=name;fields=fields} }
+
+tuple_field
+  : IDENTIFIER COLON typedef { ($1, $3) }

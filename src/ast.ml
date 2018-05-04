@@ -38,6 +38,18 @@ type 'a moduleInfo = {
   lines: 'a list;
 }
 
+type tupleInfo = {
+  name: string;
+  fields: (string * coraltype) list
+}
+
+type 'a memberInfo = {
+  base: 'a;
+  memberName: string;
+  mutable basetype: coraltype;
+  mutable memberIndex: int;
+}
+
 let make_module lines = {name="module"; lines=lines}
 
 type node =
@@ -57,6 +69,8 @@ type node =
   | Block of node list
   | Call of node * node list
   | Tuple of (node list)
+  | TupleDef of tupleInfo
+  | Member of node memberInfo
   | Return of node typeInfo
   | Empty
 type defNode = node defInfo
@@ -67,7 +81,7 @@ let newFunc (name, ret, params, body) = {
     params=params;
     body=body }
 
-let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc"
+let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc" | Member _ -> "Member" | TupleDef _ -> "TupleDef"
 
 open Printf
 
@@ -173,6 +187,16 @@ let rec pprint1 fmt indent (is_inline:bool) node =
     | If _ -> printf "if";
     | Block _ -> printf "block";
     | Empty -> printf "empty";
+    | TupleDef def ->
+       printf "type %s = {" def.name;
+       def.fields
+       |> List.map (fun (name, ctype) -> Printf.sprintf "%s:%s" name (type_to_string ctype))
+       |> String.concat ", "
+       |> printf "%s";
+       printf "}";
+    | Member mem ->
+       show1 0 true mem.base;
+       printf ".%s" mem.memberName;
     );
     if not is_inline then printf "\n"
 

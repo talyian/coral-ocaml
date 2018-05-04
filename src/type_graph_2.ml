@@ -49,7 +49,7 @@ module GraphF =
        cons_to_string a ^ "(" ^ (String.concat ", " (List.map cons_to_string p)) ^ ")"
     | OneOf p -> "(" ^ (String.concat "|" (List.map cons_to_string p)) ^ ")"
     | AllOf p -> "(" ^ (String.concat " & " (List.map cons_to_string p)) ^ ")"
-    | Member(a, m) -> cons_to_string a ^ "." ^ m
+    | Member(a, m) -> "(" ^ cons_to_string a ^ ")->" ^ m
 
   type term = { name: string; value: Node.t }
   module TermMap = Map.Make(struct type t = term let compare a b = compare a.name b.name end)
@@ -179,6 +179,9 @@ module GraphF =
          c + d, Call(p2, p3)
       | OneOf p -> let c, p2 = recurseList p in c, simplify subject @@ OneOf p2
       | AllOf p -> let c, p2 = recurseList p in c, simplify subject @@ AllOf p2
+      | Member (base, path) ->
+         let count, newbase = recurse base in
+         count, Member(newbase, path)
       | n -> 0, n in
 
     let fold_replace key target (count, actives, constraints) =
@@ -287,6 +290,11 @@ module GraphF =
         | [single], _ -> single
         | _ -> Printf.printf "multiple options for term %s\n" tt.name;
                Defer [tt, cons1; tt, call])
+    | (Term tname, Member(Type (typename, []), membername)) ->
+       let infokey = "(MemberType) " ^ typename ^ "::" ^ membername in
+       (match findTerm graph infokey with
+        | None -> failwith ("member lookup failed on type " ^ infokey)
+        | Some(t) -> Success (graph, [term_by_name [graph] tname, Term t.name]))
     | a, b ->
        if config.debug then
          Printf.printf "Deferring: %s <> %s\n"
@@ -332,7 +340,7 @@ module GraphF =
             * @@ unify_collect graph
             * @@ List.map (unify graph term (Type(tt, tp))) (Term term.name :: rest) *)
         | Some(Term n as nterm) ->
-           let rest = List.filter ((=) nterm) items in
+           let rest = List.filter ((<>) nterm) items in
            let graph = remove_term term graph in
            let graph = constrain graph term nterm in
            (* when a == b && other things, b &= other things and get rid of a *)
@@ -354,7 +362,8 @@ module GraphF =
         *     update_n_term
         *     graph.constraints in
         * 1, {graph with constraints=constraints}, shelve term nterm *)
-    | cons -> handle_unify_result @@ unify graph term (Term term.name) cons
+    | cons ->
+       handle_unify_result @@ unify graph term (Term term.name) cons
 
   let finalize graph =
     (* let rec find_type terms term =
