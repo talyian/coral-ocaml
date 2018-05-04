@@ -30,8 +30,7 @@ let rec llvmType context = function
      | "Ptr" -> Llvm.pointer_type (Llvm.i8_type context)
      | "String" -> Llvm.pointer_type (Llvm.i8_type context)
      | "Tuple" -> Llvm.void_type context
-     | _ -> failwith s;
-     )
+     | _ -> failwith ("llvmBackend: unknown type " ^ s))
   | Parameterized(name, params) ->
      (match name with
       | "Ptr" -> Llvm.pointer_type (llvmType context (List.hd params))
@@ -95,7 +94,9 @@ let rec run1 llvalues = function
                               llvalues=(AstMap.add f llfunc llvalues)
                             } f));
               looper (AstMap.add f llfunc llvalues) xs
-           | x -> failwith("unrecognized module item: " ^ (Ast.nodeName x)))) in looper llvalues lines
+           | x ->
+              let err = "llvmBackend: unrecognized module item " ^ (Ast.nodeName x) in
+              failwith err)) in looper llvalues lines
   | _ -> failwith "oops 1"
 
 and run_func context = function
