@@ -47,7 +47,6 @@ let rec llvmType context = function
      )
   | _ -> failwith "Unknown type"
 
-
 let rec run1 llvalues = function
   | Module {name=name;lines=lines} ->
      let lvContext = Llvm.global_context() in
@@ -55,48 +54,46 @@ let rec run1 llvalues = function
      let rec looper llvalues = (function
        | [] ->
           lvModule
-       | line :: xs ->
-          (match line with
-           | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
-              let llret = llvmType lvContext ret_type in
-              let vararg =
-                params
-                |> List.exists (function | Def {defType=Some(Type("..."))} -> true | _ -> false)
-              in
-              let llparams =
-                params
-                |> List.filter (function | Def {defType=Some(Type("..."))} -> false | _ -> true)
-                |> List.map (
-                       function
-                       | Def (v) ->
-                          llvmType lvContext (default (Type "Int32") v.defType)
-                       | _ -> failwith "oops")
-                |> Array.of_list in
-              let func_type =
-                if vararg then
-                  Llvm.var_arg_function_type llret llparams
-                else
-                  Llvm.function_type llret llparams in
-              let llfunc = Llvm.declare_function name func_type lvModule in
-              (match body with
-               | Empty -> ()
-               | _ ->
-                  let llbuilder = Llvm.builder lvContext in
-                  let llblock = Llvm.append_block lvContext "entry" llfunc in
-                  Llvm.position_at_end llblock llbuilder;
-                  ignore (run_func {
-                              context=lvContext;
-                              llmodule=lvModule;
-                              func=llfunc;
-                              builder=llbuilder;
-                              block=llblock;
-                              isTerminated=false;
-                              llvalues=(AstMap.add f llfunc llvalues)
-                            } f));
-              looper (AstMap.add f llfunc llvalues) xs
-           | x ->
-              let err = "llvmBackend: unrecognized module item " ^ (Ast.nodeName x) in
-              failwith err)) in looper llvalues lines
+       | Func func :: xs ->
+          let llret = llvmType lvContext func.ret_type in
+          let vararg =
+            func.params
+            |> List.exists (function | Def {defType=Some(Type("..."))} -> true | _ -> false)
+          in
+          let llparams =
+            func.params
+            |> List.filter (function | Def {defType=Some(Type("..."))} -> false | _ -> true)
+            |> List.map (function
+                | Def (v) -> (* HACK: why are we defaulting to int32 here? *)
+                   llvmType lvContext (default (Type "Int32") v.defType)
+                | _ -> failwith "oops")
+            |> Array.of_list in
+          let func_type =
+            if vararg then
+              Llvm.var_arg_function_type llret llparams
+            else
+              Llvm.function_type llret llparams in
+          let llfunc = Llvm.declare_function name func_type lvModule in
+          let llvalues_with_func = AstMap.add (Func func) llfunc llvalues in
+          (match func.body with
+           | Empty -> ()
+           | _ ->
+              let llbuilder = Llvm.builder lvContext in
+              let llblock = Llvm.append_block lvContext "entry" llfunc in
+              Llvm.position_at_end llblock llbuilder;
+              ignore (run_func {
+                          context=lvContext;
+                          llmodule=lvModule;
+                          func=llfunc;
+                          builder=llbuilder;
+                          block=llblock;
+                          isTerminated=false;
+                          llvalues=llvalues_with_func
+                        } (Func func)));
+          looper llvalues_with_func xs
+       | x :: rest ->
+          let err = "llvmBackend: unrecognized module item " ^ (Ast.nodeName x) in
+          failwith err) in looper llvalues lines
   | _ -> failwith "oops 1"
 
 and run_func context = function
