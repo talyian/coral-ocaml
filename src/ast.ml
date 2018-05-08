@@ -91,9 +91,7 @@ let newFunc (name, ret, params, body) = {
 
 let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc" | Member _ -> "Member" | TupleDef _ -> "TupleDef"
 
-open Printf
-
-let show_indent n = for i = 1 to n do printf "  " done
+let show_indent n = for i = 1 to n do Printf.printf "  " done
 
 let needs_parentheses_for_call = function
   | Binop _ -> true
@@ -110,6 +108,7 @@ let string_name_escape s = s
 
 let rec pprint1 fmt indent (is_inline:bool) node =
   let show1 = pprint1 fmt in
+  let printf = Format.fprintf fmt in
   match node with
   | Block lines -> List.iter (show1 indent is_inline) lines
   | If (cond, ifbody, elsebody) ->
@@ -128,8 +127,8 @@ let rec pprint1 fmt indent (is_inline:bool) node =
      List.iter (show1 indent is_inline) (List.map (fun f -> Func f) funcs)
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
-      | Type "" -> printf "func %s(" name
-      | tt -> printf "func %s: %s(" name (type_to_string ret_type));
+      | Type "" -> Format.fprintf fmt "func %s(" name
+      | tt -> Format.fprintf fmt "func %s: %s(" name (type_to_string ret_type));
      let rec loop = function
        | [] -> ()
        | Def p :: xs ->
@@ -146,67 +145,69 @@ let rec pprint1 fmt indent (is_inline:bool) node =
        List.iter (show1 indent is_inline) lines
     | Def x ->
        (match x.defType with
-       | None -> printf "%s" x.name
-       | Some(t) -> printf "%s: %s" x.name (type_to_string t))
+       | None -> Format.fprintf fmt "%s" x.name
+       | Some(t) -> Format.fprintf fmt "%s: %s" x.name (type_to_string t))
     | Var s ->
        (match s.varType with
-        | None -> printf "%s" s.name
-        | Some(t) -> printf "%s: %s" s.name (type_to_string t))
-    | StringLiteral s -> printf "\"%s\"" (string_escape s)
-    | IntLiteral n -> printf "%s" n
-    | FloatLiteral n -> printf "%s" n
-    | Comment c -> printf "# %s" c
+        | None -> Format.fprintf fmt "%s" s.name
+        | Some(t) -> Format.fprintf fmt "%s: %s" s.name (type_to_string t))
+    | StringLiteral s -> Format.fprintf fmt "\"%s\"" (string_escape s)
+    | IntLiteral n -> Format.fprintf fmt "%s" n
+    | FloatLiteral n -> Format.fprintf fmt "%s" n
+    | Comment c -> Format.fprintf fmt "# %s" c
     | Binop(op, lhs, rhs) ->
        show1 0 true lhs;
-       printf " %s " op;
+       Format.fprintf fmt " %s " op;
        show1 0 true rhs;
     | Call {callee=callee;args=args} ->
        show1 0 true callee;
        (match args with
         | [n] ->
-           printf " ";
-           if needs_parentheses_for_call n then printf "(";
+           Format.fprintf fmt " ";
+           if needs_parentheses_for_call n then Format.fprintf fmt "(";
            show1 0 true n;
-           if needs_parentheses_for_call n then printf ")"
+           if needs_parentheses_for_call n then Format.fprintf fmt ")"
         | _ ->
-          printf "(";
+          Format.fprintf fmt "(";
           for i = 0 to List.length args - 1 do
-            if i > 0 then printf ", ";
+            if i > 0 then Format.fprintf fmt ", ";
             show1 0 true (List.nth args i);
           done;
-          printf ")"
+          Format.fprintf fmt ")"
        )
     | Return v ->
-       printf "return ";
+       Format.fprintf fmt "return ";
        show1 0 true (v.node)
     | Let(var, value) ->
-       printf "let ";
+       Format.fprintf fmt "let ";
        show1 0 true (Var var);
-       printf " = ";
+       Format.fprintf fmt " = ";
        show1 0 true value;
     | Set(var, value) ->
-       printf "set ";
+       Format.fprintf fmt "set ";
        show1 0 true (Var var);
-       printf " = ";
+       Format.fprintf fmt " = ";
        show1 0 true value;
-    | Tuple l -> printf "Tuple()";
-    | Multifunc _ -> printf "multifunc";
-    | Func _ -> printf "func";
-    | If _ -> printf "if";
-    | Block _ -> printf "block";
-    | Empty -> printf "empty";
+    | Tuple l -> Format.fprintf fmt "Tuple()";
+    | Multifunc _ -> Format.fprintf fmt "multifunc";
+    | Func _ -> Format.fprintf fmt "func";
+    | If _ -> Format.fprintf fmt "if";
+    | Block _ -> Format.fprintf fmt "block";
+    | Empty -> Format.fprintf fmt "empty";
     | TupleDef def ->
-       printf "type %s = {" def.name;
+       Format.fprintf fmt "type %s = {" def.name;
        def.fields
        |> List.map (fun (name, ctype) -> Printf.sprintf "%s:%s" name (type_to_string ctype))
        |> String.concat ", "
-       |> printf "%s";
-       printf "}";
+       |> Format.fprintf fmt "%s";
+       Format.fprintf fmt "}";
     | Member mem ->
        show1 0 true mem.base;
-       printf ".%s" mem.memberName;
+       Format.fprintf fmt ".%s" mem.memberName;
     );
     if not is_inline then printf "\n"
 
 let show = pprint1 Format.std_formatter 0 false
-let string_of_node x = pprint1 Format.str_formatter 0 false x; Format.flush_str_formatter ()
+let string_of_node x =
+  pprint1 Format.str_formatter 0 false x;
+  Format.flush_str_formatter ()
