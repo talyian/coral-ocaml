@@ -53,7 +53,7 @@ let rec run1 scope = function
   | Let (v, expr) as x -> addName v.name x (fst (run1 scope expr)), x
   | Set (v, expr) as x -> fst (run1 scope expr), x
   | Def v as x -> addName v.name x scope, x
-  | Call (callee, args) as x ->
+  | Call {callee=callee;args=args} as x ->
      ignore (run1 scope callee);
      let rec loop = function | [] -> () | x :: xs -> ignore (run1 scope x); loop xs
      in loop args;

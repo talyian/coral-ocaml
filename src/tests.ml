@@ -8,9 +8,9 @@ let parse_test file x =
 let run () =
   "Tests" >::: [
       "hello" >:: parse_test "samples/core/hello.coral";
-      "fizzbuzz" >:: parse_test "samples/core/fizzbuzz.coral";
       "factorial" >:: parse_test "samples/core/factorial.coral";
+      "fizzbuzz" >:: parse_test "samples/core/fizzbuzz.coral";
       "collatz" >:: parse_test "samples/core/collatz.coral";
-    ]
+  ]
   |> OUnit.run_test_tt ~verbose:false
   |> ignore

@@ -49,7 +49,8 @@ ifexpr
   | IF cond=expr2 ifbody=block_or_line ELSE elsebody=ifexpr { If(cond, ifbody, elsebody) }
 
 lines
-  : line { [$1] }
+  : NEWLINE { [] }
+  | line { [$1] }
   | x=lines e=line { x @ [e] }
   | x=lines NEWLINE { x }
 
@@ -71,9 +72,9 @@ expr_atom
 (* Higher Precedence than operators *)
 expr_op_unit
   : e=expr_atom { e }
-  | callee=expr_atom LPAREN args=exprlist RPAREN { Call(callee, args) }
-  | callee=expr_op_unit LPAREN RPAREN { Call(callee, []) }
-  | callee=expr_op_unit arg=expr_atom { Call(callee, [arg]) }
+  | callee=expr_atom LPAREN args=exprlist RPAREN { Call (callNode callee args) }
+  | callee=expr_op_unit LPAREN RPAREN { Call (callNode callee []) }
+  | callee=expr_op_unit arg=expr_atom { Call (callNode callee [arg]) }
 
 expr0
   : e=expr_op_unit { e }

@@ -35,7 +35,7 @@ module GraphF =
     | Free of int
     | Term of string
     | Type of string * cons list
-    | Call of cons * cons list
+    | Call of cons * cons list * cons
     | OneOf of cons list
     | AllOf of cons list
     | Member of cons * string * cons
@@ -45,7 +45,7 @@ module GraphF =
     | Type (n, []) -> n
     | Type (n, p) ->
        n ^ "[" ^ (String.concat ", " (List.map cons_to_string p)) ^ "]"
-    | Call (a, p) ->
+    | Call (a, p, overload) ->
        cons_to_string a ^ "(" ^ (String.concat ", " (List.map cons_to_string p)) ^ ")"
     | OneOf p -> "(" ^ (String.concat "|" (List.map cons_to_string p)) ^ ")"
     | AllOf p -> "(" ^ (String.concat " &\n\t " (List.map cons_to_string p)) ^ ")"
@@ -134,8 +134,12 @@ module GraphF =
       | [] -> (match tt with | [n] -> simplify term n | x -> AllOf x) in
     function
     | (OneOf [n]) | (AllOf [n]) -> simplify term n
-    | OneOf list -> list |> noterm |> uniq |> merge_ones []
-    | AllOf list -> list |> noterm |> uniq |> merge_alls []
+    | OneOf list ->
+       let clean_list = uniq @@ noterm @@ list in
+       merge_ones [] @@ List.map (simplify term) clean_list
+    | AllOf list ->
+       let clean_list = list |> noterm |> uniq in
+       merge_alls [] @@ List.map (simplify term) clean_list
     | n -> n
 
   let constrain graph term cons =
@@ -176,10 +180,10 @@ module GraphF =
       | Term s when s = subject.name -> 1, replacement
       | Type (n, p) ->
          let c, p2 = recurseList p in c, Type(n, p2)
-      | Call (a, b) ->
+      | Call (a, b, o) ->
          let c, p2 = recurse a in
          let d, p3 = recurseList b in
-         c + d, Call(p2, p3)
+         c + d, Call(p2, p3, o)
       | OneOf p -> let c, p2 = recurseList p in c, simplify subject @@ OneOf p2
       | AllOf p -> let c, p2 = recurseList p in c, simplify subject @@ AllOf p2
       | Member (base, path, index) ->
@@ -230,15 +234,39 @@ module GraphF =
     | Defer of (term * cons) list
     | Success of graph * (term * cons) list
 
-  let unify_collect graph =
-    List.fold_left (fun a b ->
-      match a, b with
-      | Fail s, Fail t -> Fail (s ^ "; " ^ t)
-      | (Fail s, _) | (_, Fail s) -> Fail s
-      | (Defer y, Success (g, x)) | (Success (g, x), Defer y) -> Success(g, y @ x)
-      | Defer x, Defer y -> Defer (x @ y)
-      | Success (gg, s), Success (hh, t) -> Success (graph, s @ t)) (Success (graph, []))
+  let rec unify_folder (res, graph, tt) (a, b) =
+    match res with
+    | Fail s -> Fail s, graph, tt
+    | Defer y -> (
+      match unify graph tt a b with
+      | Fail s -> Fail s, graph, tt
+      | Defer z -> Defer (y @ z), graph, tt
+      | Success(hh, z) -> Success(hh, y @ z), hh, tt)
+    | Success (gg, prev) -> (
+      match unify gg tt a b with
+      | Fail s -> Fail s, graph, tt
+      | Defer y -> Success(gg, y @ prev), gg, tt
+      | Success(hh, y) -> Success(hh, y @ prev), hh, tt)
 
+  and unify_zip graph tt ap bp =
+    let zip = List.map2 (fun a b -> a, b) ap bp in
+    let initial = Success (graph, []), graph, tt in
+    let result, graph, _ = List.fold_left unify_folder initial zip in
+    result
+
+  (* let rec unify_items graph tt items =
+   *   function
+   *   | item *)
+  (* Nullify takes a graph, term, and constraint
+     and returns either a success|defer|fail judgement
+     that simplifies the constraint *)
+  and nullify graph tt = function
+    (* | Member(Type (typename, _), member, Term out_index) -> *)
+    | Call(Type("Func", params), args, o) as call -> unify graph tt (Term tt.name) call
+    | OneOf [] | AllOf [] -> Success (graph, [])
+    | OneOf [a] -> Success (graph, [tt, a])
+    | AllOf [a] -> Success (graph, [tt, a])
+    | cons -> Defer [tt, cons]
 (*
    The solving function -
    At each step we can evaluate an existing constraint and decide:
@@ -246,16 +274,19 @@ module GraphF =
     [B] it leads to a logical error
     [C] not enough info
 *)
-  let rec unify graph tt cons1 cons2 = match cons1, cons2 with
-    | Type (a, ap), Type(b, bp) ->
-       if a = b then
-         unify_collect graph @@ List.map2 (unify graph tt) ap bp
+  and unify graph tt cons1 cons2 = match cons1, cons2 with
+    | Type (name_a, ap), Type(name_b, bp) ->
+       if name_a <> name_b then
+         Fail (Printf.sprintf "mismatch: %s, %s" name_a name_b)
        else
-         Fail (Printf.sprintf "mismatch: %s, %s" a b)
-    | Term x, Term y -> Success (graph, [term_by_name [graph] x, Term y])
-    | (Term x, (Type _ as y)) | (Type _ as y, Term x) -> Success (graph, [term_by_name [graph] x, y])
-    | (Type _ as cons1, Call (Type("Func", params), args))
-    | (Term _ as cons1, Call (Type("Func", params), args)) ->
+         unify_zip graph tt ap bp
+    | Term x, Term y ->
+       Success (graph, [term_by_name [graph] x, Term y])
+    | (Term x, (Type _ as y)) | (Type _ as y, Term x) ->
+       Success (graph, [term_by_name [graph] x, y])
+
+    | (Type _ as cons1, Call (Type("Func", params), args, overload))
+    | (Term _ as cons1, Call (Type("Func", params), args, overload)) ->
        let arg1 = args @ [cons1] in
        let instantiate (gg, map, pp) = (function
            | Free n -> (match IntMap.find_opt n map with
@@ -281,18 +312,24 @@ module GraphF =
                  (List.length arg1 )
                  (List.length params))
        else
-         unify_collect graph @@ List.map2 (fun a b -> unify graph tt a b) arg1 params
-    | (Type _ as cons1, (Call (OneOf options, args) as call))
-    | (Term _ as cons1, (Call (OneOf options, args) as call)) ->
-       let optf op = unify graph tt cons1 (Call(op, args)) in
+         unify_zip graph tt arg1 params
+    | (Type _ as cons1, (Call (OneOf options, args, overload) as call))
+    | (Term _ as cons1, (Call (OneOf options, args, overload) as call)) ->
+       let optf op = unify graph tt cons1 (Call(op, args, overload)) in
        let unification = List.map optf options in
-       (match List.partition (function | Success _ -> true | _ -> false) unification with
+       let uni_indexed = List.mapi (fun i x -> i, x) unification in
+       let matches = function | n, Fail _ -> false | _ -> true in
+       (match List.partition matches uni_indexed with
         | [], _ -> Fail (Printf.sprintf "could not type %s, %s"
                           (cons_to_string @@ cons1)
-                          (cons_to_string @@ Call (OneOf options, args)))
-        | [single], _ -> single
-        | _ -> Printf.printf "multiple options for term %s\n" tt.name;
-               Defer [tt, cons1; tt, call])
+                          (cons_to_string @@ Call (OneOf options, args, overload)))
+        | [i, Success (gg, items)], _ ->
+           let overload_type = (Type ("Overload", [Type (string_of_int i, [])])) in
+           (match unify gg tt overload overload_type with
+            | Fail s -> failwith s
+            | Success (gg1, x) -> Success (gg1, x @ items)
+            | Defer x -> Success (gg, x @ items)) (* not sure what this means *)
+        | _ -> Defer [tt, cons1; tt, call])
     | (Type _ as y, Member(Type (typename, []), membername, index_cons)) ->
        let infokey = "(MemberType) " ^ typename ^ "::" ^ membername in
        let indexkey = "(MemberIndex) " ^ typename ^ "::" ^ membername in
@@ -349,6 +386,10 @@ module GraphF =
     | AllOf(n :: []) | OneOf (n :: []) -> step graph term n
     | OneOf n as t -> activate_replace_term term (simplify term t) graph
     | AllOf items ->
+       (* to simplify a N-ary &&-expression, we can either find a simple constraint
+          like term/type and unify it against the remaining to get a (N-1)-ary &&-expr
+          OR
+          we can nullify each individual term in the expression *)
        (match List.find_opt (function | Term _ -> true | Type _ -> true | _ -> false) items with
         | Some(Type(tt, tp) as cc) ->
            let rest = List.filter ((<>) cc) items in
@@ -364,9 +405,6 @@ module GraphF =
            in
            let graph = List.fold_left unifold graph cons_list in
            c, graph
-           (* handle_unify_result
-            * @@ unify_collect graph
-            * @@ List.map (unify graph term (Type(tt, tp))) (Term term.name :: rest) *)
         | Some(Term n as nterm) ->
            let rest = List.filter ((<>) nterm) items in
            let graph = remove_term term graph in
@@ -378,62 +416,27 @@ module GraphF =
            let folder graph cons = constrain graph n_term cons in
            let graph = List.fold_left folder (graph) rest in
            1, graph
-        | _ -> 0, graph)
-    (* | AllOf(Type (tt, tp) :: rest) -> *)
-    (* | AllOf(Term n as nterm :: rest) -> *)
-       (* add remaining constraints to n *)
-       (* let update_n_term x = Some (simplify term @@ addcons (AllOf rest) x) in
-        *
-        * let constraints =
-        *   TermMap.update
-        *     (term_by_name [graph] n)
-        *     update_n_term
-        *     graph.constraints in
-        * 1, {graph with constraints=constraints}, shelve term nterm *)
+        | _ ->
+           let unifold graph cons =
+             match unify graph term (Term term.name) cons with
+             | Fail s -> failwith s
+             | Success (gg, items) -> List.fold_left (fun gg (t, c) -> constrain gg t c) gg items
+             | Defer items -> graph in
+           let graph = List.fold_left unifold graph items in
+           1, graph
+       )
     | cons ->
        handle_unify_result @@ unify graph term (Term term.name) cons
 
-  let finalize graph =
-    (* let rec find_type terms term =
-     *   match TermMap.find_opt term dependents.constraints with
-     *   | Some(Type _ as t) -> Some t
-     *   | Some(Term m) ->
-     *      (match StringSet.find_opt m terms with
-     *       | None -> find_type (StringSet.add m terms) (term_by_name [graph;dependents] m)
-     *       | Some(m) -> Some (Term m))
-     *   | _ -> None in
-     * let rec update_cons = function
-     *   | Term n -> (match find_type StringSet.empty (term_by_name [graph;dependents] n) with | None -> Term n | Some x -> x)
-     *   | Type(a, ap) -> Type(a, List.map update_cons ap)
-     *   | x -> x in
-     * {dependents with constraints = TermMap.map update_cons dependents.constraints } *)
-    graph
+  let finalize graph = graph
   let solve graph =
     (* "Solving" a graph consists of iteratively removing constraints:
        1. term :: type foo can be removed via substitution
        2. term :: Term foo can be removed via substitution
        3: term :: Call(Type("Func", params), args) can be removed via
             pairwise reduction of params against (args @ [ term]) *)
-
-    let graph =
-      {graph with active_terms = graph.constraints
-                                 |> TermMap.bindings
-                                 |> List.map fst
-                                 |> TermSet.of_list} in
     (* solve_step iterates through all the active terms once *)
-   let rec solve_step n graph =
-      (* let merge term a b = match a, b with | a, b -> Some (AllOf [a; b]) in *)
-      let step_once term (i, g1) =
-        match TermMap.find_opt term g1.constraints with
-        | None -> 0, g1
-        | Some(cons) ->
-           let j, g1 = step g1 term cons in
-           (* if config.debug then (
-            *   Printf.printf "step: %s = %s\n" term.name (cons_to_string cons);
-            *   showColor (5, 5, 5) g1;
-            *   showColor (5, 2, 5) g2); *)
-           i + j, g1
-      in
+    let rec solve_step n graph =
       if config.debug then
         begin
           Printf.printf "------------------------------------------------------------\n";
@@ -441,13 +444,17 @@ module GraphF =
           Printf.printf "[%d]\n" n;
           flush stdout;
         end;
+      let step_once term (i, g1) =
+        match TermMap.find_opt term g1.constraints with
+        | None -> 0, g1
+        | Some(cons) -> let j, g1 = step g1 term cons in i + j, g1 in
       match TermSet.fold step_once graph.active_terms (0, graph) with
       | 0, b -> (0, b)
       | other, b ->
          if config.debug then Printf.printf "ct: [%d]\n" other;
-         if n > 0 then solve_step (n - 1) b else -1, b
-    in
-     let i, g1 = solve_step 10 graph
+         if n > 0 then solve_step (n - 1) b else -1, b in
+    (* 10 steps is an arbitrary limit *)
+    let i, g1 = solve_step 10 graph
     in finalize g1
 
 end

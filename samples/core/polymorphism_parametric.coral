@@ -1,0 +1,8 @@
+func printf: Void (fmt:String, ...)
+
+# Parametric Polymorphism
+# Specify generic functions that operate over multiple types
+func foo (x):
+   x + x
+
+printf("parametric polymorphism test: (%f, %ld)\n", foo 3.14, foo 10)

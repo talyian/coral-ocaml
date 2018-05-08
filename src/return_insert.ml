@@ -4,11 +4,17 @@ open Ast
 
 let rec find_function = function
   | Module m -> Module {m with lines=List.map find_function m.lines}
-  | Func {name=name; ret_type=ret_type; params=params; body=Empty} ->
-     Func (newFunc(name, ret_type, params, Empty))
-  | Func {name=name; ret_type=ret_type; params=params; body=body} ->
-     Func (newFunc(name, ret_type, params, rewrite ret_type body))
+  | Multifunc (name, funcs) ->
+     Multifunc (name, List.map rewrite_function funcs)
+  | Func data -> Func(rewrite_function data)
   | n -> n
+
+and rewrite_function {name=name; ret_type=ret_type; params=params; body=body} =
+  if body = Empty then
+    newFunc(name, ret_type, params, Empty)
+  else
+    newFunc(name, ret_type, params, rewrite ret_type body)
+
 and rewrite retType = function
   | If (cond, ifbody, elsebody) ->
      If (cond,

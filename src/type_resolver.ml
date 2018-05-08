@@ -45,6 +45,14 @@ let rec createGraph g node =
          let terms, gg = List.fold_left fold ([], gg) list in
          let gg = Graph.constrain gg blockterm (Graph.Term (List.hd terms).name) in
          blockterm, gg)
+  | Multifunc (name, fdata_list) as mfunc ->
+     let terms, graph =
+       let folder (tt, gg) f = let fterm, gg = createGraph gg (Func f) in fterm :: tt, gg in
+       List.fold_left folder ([], g) fdata_list in
+     let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
+     let graph = Graph.constrain graph mfunc_term
+                   (Graph.OneOf(List.map (fun (t:Graph.term) -> Graph.Term t.name) terms)) in
+     mfunc_term, graph
   | Func fdata as func ->
      let fold (terms, gg1) param =
        let (t, gg2) = createGraph gg1 param in
@@ -100,7 +108,8 @@ let rec createGraph g node =
      let gg =
        let callee = Graph.Term op in
        let args = [Graph.Term lterm.name; Graph.Term rterm.name] in
-       Graph.constrain gg term (Graph.Call (callee, args)) in
+       let overload_idx, gg = Graph.addTerm gg "overload" binop in
+       Graph.constrain gg term (Graph.Call (callee, args, Graph.Term (overload_idx.name))) in
      term, gg
   | Var info ->
      (match info.target with
@@ -112,7 +121,7 @@ let rec createGraph g node =
      let term, gg = Graph.addTerm g "x" tt in
      let gg = Graph.constrain gg term (Graph.Type ("Void", [])) in
      term, gg
-  | Call (callee, args) as call->
+  | Call {callee=callee;args=args} as call->
      let calleeterm, gg = createGraph g callee in
      let fold (terms, g) a =
        let (t, g) = createGraph g a in
@@ -122,7 +131,8 @@ let rec createGraph g node =
      let gg =
        let c1 = Graph.Term calleeterm.name in
        let c2 = List.map (fun (t:Graph.term) -> Graph.Term t.name) argterms in
-       Graph.constrain gg term (Graph.Call (c1, c2)) in
+       let overload_idx, gg = Graph.addTerm gg ("overload." ^ calleeterm.name) call in
+       Graph.constrain gg term (Graph.Call (c1, c2, Graph.Term overload_idx.name)) in
      term, gg
   | StringLiteral s as snode ->
      let term, gg = Graph.addTerm g ("s" ^ Ast.string_name_escape s) snode in
@@ -192,9 +202,26 @@ let applySolution gg m =
       | TupleDef _
       | Block _
       | FloatLiteral _ | IntLiteral _ | Empty _ -> ()
+      | StringLiteral _ -> ()
+        (* TODO: if we tag binops with type
+         we can resolve overloaded operators *)
+      | Binop _ -> ()
+      | If _ -> ()
+      | Tuple _ -> () (* TODO: we need to populate these *)
+      | Call {callee=Var ({target=Some(Multifunc (mf_name, mf_funcs))} as cinfo)} ->
+         (match cons with
+          | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
+             let idx = int_of_string index_str in
+             cinfo.target <- Some(Func (List.nth mf_funcs idx))
+          | _ -> ());
+         if Graph.config.debug then
+           Printf.printf "%s (%s) --> %s\n"
+             (Ansicolor.as_color (Bold YELLOW) term.name)
+             (Ast.nodeName term.value) (Graph.cons_to_string cons);
       | _ ->
-         Printf.printf "%s (%s) --> %s\n" (Ansicolor.as_color (Bold CYAN) term.name)
-           (Ast.nodeName term.value) (Graph.cons_to_string cons);
+         if Graph.config.debug then
+           Printf.printf "%s (%s) --> %s\n" (Ansicolor.as_color (Bold CYAN) term.name)
+             (Ast.nodeName term.value) (Graph.cons_to_string cons);
          ()
   ) gg.Graph.constraints
 
@@ -212,10 +239,9 @@ let run m =
 
   (* Ast.show m; *)
   let term, graph = createGraph gg m in
-  (* Graph.show graph; *)
+  if Graph.config.debug then Graph.show graph;
   let solution = Graph.solve graph in
-  (* Graph.show solution;
-   * flush stdout; *)
+  if Graph.config.debug then Graph.show solution;
   applySolution solution m;
-  (* Ast.show m; *)
+  flush stdout;
   m

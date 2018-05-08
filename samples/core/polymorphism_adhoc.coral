@@ -1,15 +1,28 @@
-func printf: Void(fmt:String, ...)
+# Ad-hoc Polymorphism Test
+#   "ad-hoc" (Latin): "for this particular purpose"
+#   Specify type-specific implementations for a function
 
-# Parametric Polymorphism
-# Specify generic functions that operate over multiple types
-func foo (x):
-   x + x
+func printf: Void (fmt:String, ...)
 
-printf("parametric polymorphism test: (%f, %ld)\n", foo 3.14, foo 10)
+func print(s:Float64):
+  printf("Float64: %g\n", s)
 
-# # "ad-hoc" (Latin): "for this particular purpose"
-# # Ad-hoc polymorphism:
-# # Specify type-specific implementations for a function
+func print(s:Int64):
+  printf("Int64: %ld\n", s)
+
+print 3
+print 4
+print 6.6
+
+# func printf: Void(fmt:String, ...)
+
+# # Parametric Polymorphism
+# # Specify generic functions that operate over multiple types
+# func foo (x):
+#    x + x
+
+# printf("parametric polymorphism test: (%f, %ld)\n", foo 3.14, foo 10)
+
 # func bar (x: Float64):
 #   x * 2.0
 

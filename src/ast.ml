@@ -50,6 +50,14 @@ type 'a memberInfo = {
   mutable memberIndex: int;
 }
 
+type 'a callInfo = {
+  callee: 'a;
+  args: 'a list;
+  (* The type solver sets this if the callee is a multifunc *)
+  mutable overloadIndex: int;
+}
+let callNode callee args = {callee=callee;args=args;overloadIndex=0}
+
 let make_module lines = {name="module"; lines=lines}
 
 type node =
@@ -67,7 +75,7 @@ type node =
   | Let of node varInfo * node
   | Set of node varInfo * node
   | Block of node list
-  | Call of node * node list
+  | Call of node callInfo
   | Tuple of (node list)
   | TupleDef of tupleInfo
   | Member of node memberInfo
@@ -152,7 +160,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
        show1 0 true lhs;
        printf " %s " op;
        show1 0 true rhs;
-    | Call(callee, args) ->
+    | Call {callee=callee;args=args} ->
        show1 0 true callee;
        (match args with
         | [n] ->

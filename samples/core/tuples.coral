@@ -2,27 +2,29 @@ func printf: Void (fmt:String, ...)
 
 type vector3d = {x:Float64, y:Float64, z:Float64}
 
+func sqrt: Float64 (n:Float64)
+
 func length2 (v:vector3d):
   v.x * v.x + v.y * v.y + v.z * v.z
 
+func length (v:vector3d):
+  sqrt(length2 v)
+
+func sum(v:vector3d, u:vector3d):
+  vector3d(v.x + u.x, v.y + u.y, v.z + u.z)
+
+# BUG 5-7-18: for some reason when these "print" functions are reordered
+# LLVM codegen  breaks :(
+func print(v:vector3d):
+  printf("{%g, %g, %g}\n", v.x, v.y, v.z)
+
+func print(f:Float64):
+  printf("%g\n", f)
+
 let v = vector3d(2.0, 3.0, 6.0)
-printf ("hi, %f, %f, %f\n", v.x, v.y, v.z)
-printf ("hello, %f\n", length2 v)
-
-# func sqrt: Float64 (n:Float64)
-# func sqrt: Float32 (n:Float32)
-# func sqrt: Int64   (n:Int64)
-# func sqrt: Int32   (n:Int32)
-# func abs: Float64 (n:Float64)
-# func abs: Float64 (n:Float64)
-
-# func length (v:vector3d):
-#   sqrt (length2 v)
-
-# type vector3[T] = {x:T, y:T, z:T}
-
-# func length2 (v:vector3):
-#   v.x * v.x + v.y * v.y + v.z * v.z
-
-# func length (v:vector3d):
-#   sqrt (length2 v)
+let u = vector3d(1.1, 1.0, 1.0)
+printf "Vector Test\n"
+print 3.5
+print u
+print v
+print(length(sum (u, v)))

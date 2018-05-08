@@ -33,8 +33,8 @@ let rec llvmType llmodule context = function
      | name ->
         match Llvm.type_by_name llmodule name with
         | Some(v) ->
-           Llvm.string_of_lltype v |> Printf.printf "lltype: %s\n";
-           flush stdout;
+           (* Llvm.string_of_lltype v |> Printf.printf "lltype: %s\n";
+            * flush stdout; *)
            v
         | None -> failwith ("llvmBackend: unknown type " ^ s))
   | Parameterized(name, params) ->
@@ -58,48 +58,16 @@ let rec run1 llvalues = function
      let lvContext = Llvm.global_context() in
      let lvModule = Llvm.create_module lvContext module_name in
      let rec looper llvalues = (function
-       | [] ->
-          lvModule
+       | [] -> lvModule
        | Func func :: xs ->
-          Printf.printf "defining function: %s \n" func.name; flush stdout;
-          let llret = llvmType lvModule lvContext func.ret_type in
-          let vararg =
-            func.params
-            |> List.exists (function | Def {defType=Some(Type("..."))} -> true | _ -> false)
-          in
-          let llparams =
-            func.params
-            |> List.filter (function | Def {defType=Some(Type("..."))} -> false | _ -> true)
-            |> List.map (function
-                | Def (v) -> (* HACK: why are we defaulting to int32 here? *)
-                   llvmType lvModule lvContext (default (Type "Int32") v.defType)
-                | _ -> failwith "oops")
-            |> Array.of_list in
-          let func_type =
-            if vararg then
-              Llvm.var_arg_function_type llret llparams
-            else
-              Llvm.function_type llret llparams in
-          let llfunc = Llvm.declare_function func.name func_type lvModule in
-          let llvalues_with_func = AstMap.add (Func func) llfunc llvalues in
-          (* Llvm.string_of_lltype llret |> Printf.printf "llret: %s\n"; flush stdout;
-           * Llvm.string_of_lltype func_type |> Printf.printf "llfunc: %s\n"; flush stdout; *)
-          (match func.body with
-           | Empty -> ()
-           | _ ->
-              let llbuilder = Llvm.builder lvContext in
-              let llblock = Llvm.append_block lvContext "entry" llfunc in
-              Llvm.position_at_end llblock llbuilder;
-              ignore (run_func {
-                          context=lvContext;
-                          llmodule=lvModule;
-                          func=llfunc;
-                          builder=llbuilder;
-                          block=llblock;
-                          isTerminated=false;
-                          llvalues=llvalues_with_func
-                        } (Func func)));
-          looper llvalues_with_func xs
+          let llvalues = generate_function lvContext lvModule llvalues (Func func) in
+          looper llvalues xs
+       | Multifunc (name, func_list) :: xs ->
+          let llvalues = List.fold_left
+            (fun lv f -> generate_function lvContext lvModule lv (Func f))
+            llvalues
+            func_list in
+          looper llvalues xs
        | TupleDef info as tuple :: rest ->
           let llfields =
             info.fields
@@ -107,18 +75,60 @@ let rec run1 llvalues = function
             |> Array.of_list in
           let tuple_type = Llvm.named_struct_type lvContext info.name in
           Llvm.struct_set_body tuple_type llfields true;
-          Llvm.string_of_lltype tuple_type |> Printf.printf "tuple type: %s\n";
-          flush stdout;
+          (* Llvm.string_of_lltype tuple_type |> Printf.printf "tuple type: %s\n";
+           * flush stdout; *)
           looper llvalues rest
        | x :: rest ->
           let err = "llvmBackend: unrecognized module item " ^ (Ast.nodeName x) in
           failwith err) in looper llvalues lines
   | _ -> failwith "oops 1"
 
+and generate_function lvContext lvModule llvalues = function
+  | Func func ->
+     (* Printf.printf "defining function: %s \n" func.name; flush stdout; *)
+     let llret = llvmType lvModule lvContext func.ret_type in
+     let is_vararg = function | Def {defType=Some(Type("..."))} -> true | _ -> false in
+     let vararg = List.exists is_vararg func.params in
+     let llparams =
+       func.params
+       |> List.filter (fun x -> not @@ is_vararg x)
+       |> List.map (function
+              | Def (v) -> (* HACK: why are we defaulting to int32 here? *)
+                 llvmType lvModule lvContext (default (Type "Int32") v.defType)
+              | _ -> failwith "oops")
+       |> Array.of_list in
+     let func_type =
+       if vararg then
+         Llvm.var_arg_function_type llret llparams
+       else
+         Llvm.function_type llret llparams in
+     (match func.body with
+      | Empty ->
+         let llfunc = Llvm.declare_function func.name func_type lvModule in
+         let llvalues_with_func = AstMap.add (Func func) llfunc llvalues in
+         llvalues_with_func
+      | _ ->
+         let llfunc = Llvm.define_function func.name func_type lvModule in
+         let llvalues_with_func = AstMap.add (Func func) llfunc llvalues in
+         let llbuilder = Llvm.builder lvContext in
+         let llblock = Llvm.entry_block llfunc in
+         (* let llblock = Llvm.append_block lvContext "entry" llfunc in *)
+         Llvm.position_at_end llblock llbuilder;
+         ignore (run_func {
+                     context=lvContext;
+                     llmodule=lvModule;
+                     func=llfunc;
+                     builder=llbuilder;
+                     block=llblock;
+                     isTerminated=false;
+                     llvalues=llvalues_with_func
+                   } (Func func));
+         llvalues_with_func)
+  | n -> failwith (Format.sprintf "Expected function, %s found" (Ast.nodeName n))
+
 and run_func context =
-  print_string "run_func! \n"; flush stdout;
   function
-  | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
+  | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      let rec loop i (Def p) =
        match p.defType with
        | None -> failwith (Format.sprintf "%s: def [%s] has no type" name p.name)
@@ -203,7 +213,7 @@ and run_func context =
          ignore @@ run_func context value;
          Llvm.build_ret_void context.builder
       | {node=value} -> Llvm.build_ret (run_func context value) context.builder)
-  | Call (Var {target=Some(TupleDef tuple)}, args) ->
+  | Call {callee=Var {target=Some(TupleDef tuple)}; args=args} ->
      (match Llvm.type_by_name context.llmodule tuple.name with
       | Some(lltupletype) ->
          (* start with Llvm.undef and fold into a fully defined struct *)
@@ -212,7 +222,7 @@ and run_func context =
            i + 1, Llvm.build_insertvalue structval value i "" context.builder in
          snd @@ List.fold_left fieldloop (0, Llvm.undef lltupletype) args
       | None -> failwith ("unknown type" ^ tuple.name))
-  | Call (callee, args) ->
+  | Call {callee=callee; args=args} ->
      let llcallee = (run_func context callee) in
      let llargs = List.map (run_func context) args |> Array.of_list in
      (* Printf.printf "%s\n" (as_rgb (5, 0, 0) "calling ");
@@ -229,12 +239,10 @@ and run_func context =
   | Var v_info ->
      (match v_info.target with
       | Some(Let (var, value) as letnode) ->
-         Printf.printf "let some????\n";
          (match AstMap.find_opt letnode context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
           | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
       | Some(Def n as defnode) ->
-         Printf.printf "def some????\n";
          (match AstMap.find_opt defnode context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
           | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
@@ -243,7 +251,6 @@ and run_func context =
          | None -> failwith ("llvmBackend: failed to find var " ^ f.name)
          | Some (var) -> var)
       | Some(v) ->
-         Printf.printf "some????\n";
          (match AstMap.find_opt v context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
           | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
@@ -284,8 +291,8 @@ and run_func context =
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
 
-  Llvm.string_of_llmodule llmodule |> print_endline;
-  flush stdout;
+  (* Llvm.string_of_llmodule llmodule |> print_endline;
+   * flush stdout; *)
 
   Llvm_analysis.assert_valid_module llmodule;
 
