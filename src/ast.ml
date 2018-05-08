@@ -188,7 +188,14 @@ let rec pprint1 fmt indent (is_inline:bool) node =
        show1 0 true (Var var);
        Format.fprintf fmt " = ";
        show1 0 true value;
-    | Tuple l -> Format.fprintf fmt "Tuple()";
+    | Tuple [] -> Format.fprintf fmt "Tuple()";
+    | Tuple items ->
+       Format.fprintf fmt "(";
+       let rec looper = function
+         | [] -> ()
+         | [item] -> show1 0 true item
+         | x :: xs -> show1 0 true x; Format.fprintf fmt ", "; looper xs
+       in looper items; Format.fprintf fmt ")";
     | Multifunc _ -> Format.fprintf fmt "multifunc";
     | Func _ -> Format.fprintf fmt "func";
     | If _ -> Format.fprintf fmt "if";
