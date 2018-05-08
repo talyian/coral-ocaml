@@ -123,23 +123,36 @@ module GraphF =
    * we need to simplify it to keep it from exploding in size *)
   let rec simplify term =
     let noterm = List.filter ((<>) (Term term.name)) in
-    let uniq = List.sort_uniq compare in
-    let rec merge_ones tt = function
-      | OneOf x :: rest -> merge_ones (x @ tt) rest
-      | x :: rest -> merge_ones (x :: tt) rest
-      | [] -> (match tt with | [n] -> simplify term n | x -> OneOf x) in
-    let rec merge_alls tt = function
-      | AllOf x :: rest -> merge_alls (x @ tt) rest
-      | x :: rest -> merge_alls (x :: tt) rest
-      | [] -> (match tt with | [n] -> simplify term n | x -> AllOf x) in
+    let uniq list =
+      let remove x = function
+        | n :: xs -> if x = n then xs else n :: xs
+        | [] -> [] in
+      match list with
+      | [] -> []
+      | x :: xs -> x :: remove x xs in
+    let rec merge_ones = function
+      | OneOf x :: rest -> merge_ones x @ merge_ones rest
+      | x :: rest -> x :: merge_ones rest
+      | [] -> [] in
+    (* let rec merge_alls tt = function
+     *   | AllOf x :: rest -> merge_alls (x @ tt) rest
+     *   | x :: rest -> merge_alls (x :: tt) rest
+     *   | [] -> (match tt with | [n] -> simplify term n | x -> [x) in
+     * let merge_alls x = List.rev @@ merge_alls [] x  in *)
+    let rec merge_alls = function
+      | AllOf x :: rest -> merge_alls x @ merge_alls rest
+      | x :: rest -> x :: merge_alls rest
+      | [] -> [] in
     function
     | (OneOf [n]) | (AllOf [n]) -> simplify term n
     | OneOf list ->
        let clean_list = uniq @@ noterm @@ list in
-       merge_ones [] @@ List.map (simplify term) clean_list
+       let out = merge_ones @@ List.map (simplify term) clean_list in
+       OneOf out
     | AllOf list ->
        let clean_list = list |> noterm |> uniq in
-       merge_alls [] @@ List.map (simplify term) clean_list
+       let out = merge_alls @@ List.map (simplify term) clean_list in
+       AllOf out
     | n -> n
 
   let constrain graph term cons =

@@ -50,8 +50,11 @@ let rec createGraph g node =
        let folder (tt, gg) f = let fterm, gg = createGraph gg (Func f) in fterm :: tt, gg in
        List.fold_left folder ([], g) fdata_list in
      let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
-     let graph = Graph.constrain graph mfunc_term
-                   (Graph.OneOf(List.map (fun (t:Graph.term) -> Graph.Term t.name) terms)) in
+     let graph =
+       let terms = List.rev terms in
+       let options = List.map (fun (t:Graph.term) -> Graph.Term t.name) terms in
+       let mfunc_type = (Graph.OneOf options ) in
+       Graph.constrain graph mfunc_term mfunc_type in
      mfunc_term, graph
   | Func fdata as func ->
      let fold (terms, gg1) param =
