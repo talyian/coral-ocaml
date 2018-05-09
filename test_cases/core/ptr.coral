@@ -1,0 +1,19 @@
+##option nostdlib, cstring-literals, c-load foobar sdl2
+
+func printf: Void(fmt:Ptr, ...)
+
+func i32_l: Int32(v:Int64)
+func i32_s: Int32(v:String)
+func i32: Int32(v:Int64): i32_l v
+func i32: Int32(v:String): i32_s v
+func i64_p: Int64(v:Ptr)
+
+printf ("Ptr Test\n")
+let a = 1
+let b = i32 2
+printf ("&a: %p\n", addrof a)
+printf ("&b: %p\n", addrof b)
+
+let s = "the fast red dog drives a blue convertible"
+printf("%s\n", s)
+printf("%s\n", s + 4 - 2)

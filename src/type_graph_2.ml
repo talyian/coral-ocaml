@@ -13,12 +13,9 @@ Incremental typing makes codegen more difficult. For example, the resolved type 
 At each call site then during codegen, we need to generate an instantiation.
 
    func foo(s): return s + s
-   // generates foo$Int32
-   foo 1
-   // generates foo$Float64
-   foo 1.5
-   // reuses foo$Int32
-   foo 2
+   foo 1   // generates foo$Int32
+   foo 1.5   // generates foo$Float64
+   foo 2   // reuses foo$Int32
 *)
 
 module GraphF =
@@ -304,16 +301,22 @@ module GraphF =
     | (Type _ as cons1, Call (Type("Func", params), args, overload))
     | (Term _ as cons1, Call (Type("Func", params), args, overload)) ->
        let arg1 = args @ [cons1] in
-       let instantiate (gg, map, pp) = (function
-           | Free n -> (match IntMap.find_opt n map with
-               | None ->
-                  let nt, gg = addTerm gg "free" Node.empty in
-                  gg, IntMap.add n nt map, (Term nt.name) :: pp
-               | Some(t) -> gg, map, Term t.name :: pp)
-           | n -> gg, map, n :: pp) in
-       let graph, _, params =
-         List.fold_left instantiate (graph, IntMap.empty, []) (List.rev params) in
-
+       let rec instantiate_f (gg, map, terms) = function
+         | Free n ->
+            let next = match IntMap.find_opt n map with
+              | None ->
+                 let new_term, gg = addTerm gg "free" Node.empty in
+                 gg, IntMap.add n new_term map, Term new_term.name :: terms
+              | Some(t) -> gg, map, Term t.name :: terms in
+            next
+         | Type(name, params) ->
+            let gg, map, pterms = List.fold_left instantiate_f (gg, map, []) params in
+            gg, map, Type(name, pterms) :: terms
+         | other -> gg, map, other :: terms
+       in
+       let graph, _, [Type(name, params)] =
+         instantiate_f (graph, IntMap.empty, []) (Type("Func", params)) in
+       let params = List.rev params in
        (* handle varargs *)
        let arg1, params =
          if List.exists (function | Type ("...", _) -> true | _ -> false) params then

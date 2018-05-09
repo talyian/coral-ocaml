@@ -25,14 +25,7 @@ main
   | x=lines e=expr EOF { Module(make_module @@ x @ [e]) }
 
 line
-  : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block_or_line
-    { Func(newFunc (name, Type(""), p, body)) }
-  | FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN NEWLINE
-    { Func(newFunc (name, Type(""), p, Empty)) }
-  | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN body=block_or_line
-    { Func(newFunc (name, ret, p, body)) }
-  | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE
-    { Func(newFunc (name, ret, p, Empty)) }
+  : func_declaration { $1 }
   | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None;varType=None}, e) }
   | LET name=IDENTIFIER COLON t=typedef EQ e=expr NEWLINE {
       Let({name=name;target=None;varType=Some(t)}, e) }
@@ -42,6 +35,17 @@ line
   | e=expr NEWLINE { e }
   | e=ifexpr {e}
   | e=tuple_def { TupleDef e }
+
+func_name
+  : IDENTIFIER { $1 }
+  | IDENTIFIER LBRACKET typedef RBRACKET { $1}
+func_return : COLON ret=typedef { ret }
+func_params : LPAREN p=paramlist RPAREN { p }
+func_body   : block_or_line { $1 } | NEWLINE { Empty }
+func_declaration
+  : FUNC name=func_name ret=func_return? p=func_params body=func_body
+    { let ret = match ret with | Some (v) -> v | None -> Type "" in
+      Func(newFunc (name, ret, p, body)) }
 
 ifexpr
   : IF cond=expr2 ifbody=block_or_line { If(cond, ifbody, Empty) }

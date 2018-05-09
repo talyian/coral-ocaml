@@ -20,7 +20,7 @@ let rec type_to_constraint = function
 let rec constraint_to_type = function
   | Graph.Type(s, []) -> Ast.Type s
   | Graph.Type(s, params) -> Ast.Parameterized(s, List.map constraint_to_type params)
-  | c -> failwith ("unhandled type" ^ Graph.cons_to_string c)
+  | c -> failwith ("unhandled type: " ^ Graph.cons_to_string c)
 
 let rec createGraph g node =
   match node with
@@ -116,7 +116,15 @@ let rec createGraph g node =
      term, gg
   | Var info ->
      (match info.target with
-      | None -> failwith "missing reference"
+      | None ->
+         (match Graph.findTerm g ("global::" ^  info.name) with
+          | None -> 
+             let msg = "Type Warning: missing reference: " ^ (info.name) in
+             Printf.printf "%s\n" (Ansicolor.as_color (Color YELLOW) msg);
+             failwith "oops"
+          | Some(t) ->
+             Printf.printf "found global: %s\n" t.name;
+             t, g)
       | Some(target) ->
          let term = Graph.findTermByValue g target in
          term, g)
@@ -239,7 +247,12 @@ let run m =
     Graph.constrain gg op optype in
   let gg = List.fold_left (fold_op_is arith_op_type) gg ["+"; "*"; "-"; "/"; "%"] in
   let gg = List.fold_left (fold_op_is bool_op_type) gg ["="; "<";">"; ">="; "<="; "!="] in
-
+  let gg =
+    let tt, gg = Graph.addTerm gg "global::addrof" Empty in
+    let free = Graph.Free 0 in
+    let gg = Graph.constrain gg tt (
+                 Graph.Type("Func", [free; Graph.Type("Ptr", [free])])) in
+    gg in
   (* Ast.show m; *)
   let term, graph = createGraph gg m in
   if Graph.config.debug then Graph.show graph;

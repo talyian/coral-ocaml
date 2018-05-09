@@ -3,13 +3,12 @@ open CoralModule
 external hellow : unit -> unit = "hellow"
 
 let () =
-  Tests.run Tests.main_test;
-  (* Tests.run_def_test(); *)
-  (* run @@ parse_file "test_cases/core/def.coral";
-   * exit 0; *)
+  (* Tests.run Tests.main_test; *)
+  run @@ parse_file "test_cases/core/ptr.coral";
+  exit 0;
   (* run @@ parse_file "test_cases/libs/pcre.coral";
    * exit 0; *)
-  (* CoralModule.tokenize_file "test_cases/core/polymorphism_adhoc.coral"; *)
+  (* tokenize_file "test_cases/core/polymorphism_adhoc.coral"; *)
   (* Tests.run (); *)
   (* hellow (); (\* test c bindings work *\) *)
   (* run @@ parse_file "test_cases/core/hello.coral";

@@ -44,12 +44,10 @@ let rec run1 scope = function
   | StringLiteral s as x -> scope, x
   | Comment c as x -> scope, x
   | Var v as x ->
-     (match findName v.name scope with
-      | Some(e) -> v.target <- Some(e)
-      | None ->
-         Printf.printf "\027[1;31mmissing reference: %s\027[0m\n" v.name;
-         failwith ("missing reference " ^ v.name);
-     ); scope, x
+     let _ = match findName v.name scope with
+       | Some(e) -> v.target <- Some(e)
+       | None -> (* Printf.printf "missing reference: %s\n" v.name; *) ()
+     in scope, x
   | Let (v, expr) as x -> addName v.name x (fst (run1 scope expr)), x
   | Set (v, expr) as x -> fst (run1 scope expr), x
   | Def v as x -> addName v.name x scope, x
@@ -71,7 +69,4 @@ let rec run1 scope = function
      let scope, _ = run1 scope mem.base in scope, member
   | Return {node=v} as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
-  | x ->
-     Printf.printf "Warning: Unhandled node for name resolver: %s\n" (Ast.nodeName x);
-     scope, x
 let run x = snd (run1 {parent=None; names=StringMap.empty} x)
