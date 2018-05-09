@@ -1,43 +1,23 @@
 # Ad-hoc Polymorphism Test
 #   "ad-hoc" (Latin): "for this particular purpose"
-#   Specify type-specific implementations for a function
-
+#   Specify type-specific overloads for a function
 func printf: Void (fmt:String, ...)
 
+# Regular overloading on parameter type
 func print(s:Float64):
   printf("Float64: %g\n", s)
-
 func print(s:Int64):
   printf("Int64: %ld\n", s)
-
 print 3
 print 4
 print 6.6
 
-# func printf: Void(fmt:String, ...)
+# Dependent return types on overloads
+func process(s:Float64):
+  "floats return a string"
+func process(s:Int64):
+  123.4567
 
-# # Parametric Polymorphism
-# # Specify generic functions that operate over multiple types
-# func foo (x):
-#    x + x
-
-# printf("parametric polymorphism test: (%f, %ld)\n", foo 3.14, foo 10)
-
-# func bar (x: Float64):
-#   x * 2.0
-
-# func bar (x: Int64):
-#   x * 2
-
-# printf ("adhoc polymorphism test: (%f, %ld)\n", bar 3.14, bar 10)
-
-# func bob (x): x + 1
-
-# foo: Func[x, +]
-#   +: call(Func[t0, t0, t0], x, x)
-#  c1: call(foo, Float)
-#  c2: call(foo, Int)
-
-#   +: call(Func[t0, t0, t0], x, x)
-#  c1: call(Func[x, +], Float)
-#  c2: call(Func[x, +], Int)
+printf("Process: %g -> %s\n", 2.3, process 2.3)
+printf("Process: %d -> %g\n", 2, process 2)
+printf("Process: %d -> %s\n", 2, process(process 2))

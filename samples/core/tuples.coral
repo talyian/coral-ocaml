@@ -13,18 +13,16 @@ func length (v:vector3d):
 func sum(v:vector3d, u:vector3d):
   vector3d(v.x + u.x, v.y + u.y, v.z + u.z)
 
-# BUG 5-7-18: for some reason when these "print" functions are reordered
-# LLVM codegen  breaks :(
-func print(v:vector3d):
-  printf("{%g, %g, %g}\n", v.x, v.y, v.z)
-
 func print(f:Float64):
   printf("%g\n", f)
 
-let v = vector3d(2.0, 3.0, 6.0)
+func print(v:vector3d):
+  printf("{%g, %g, %g}\n", v.x, v.y, v.z)
+
+let v = vector3d(2.01, 3.0, 6.01)
 let u = vector3d(1.1, 1.0, 1.0)
 printf "Vector Test\n"
-print 3.5
+print(length v)
 print u
 print v
-print(length(sum (u, v)))
+print(length(sum(u, v)))

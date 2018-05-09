@@ -40,4 +40,5 @@ main.native: src/grammar.mly src/lexer.mll src/lexerInterface.ml \
 	-package oUnit
 
 _build/src/foobar.o: src/foobar.c
+	mkdir -p $$(dirname $@)
 	${CC} -c -o $@ $+

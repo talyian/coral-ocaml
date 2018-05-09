@@ -48,7 +48,7 @@ module GraphF =
     | Call (a, p, overload) ->
        cons_to_string a ^ "(" ^ (String.concat ", " (List.map cons_to_string p)) ^ ")"
     | OneOf p -> "(" ^ (String.concat "|" (List.map cons_to_string p)) ^ ")"
-    | AllOf p -> "(" ^ (String.concat " &\n\t " (List.map cons_to_string p)) ^ ")"
+    | AllOf p -> "(" ^ (String.concat " & " (List.map cons_to_string p)) ^ ")"
     | Member(a, m, index) ->
        let str_base = cons_to_string a in
        let str_index =cons_to_string index in

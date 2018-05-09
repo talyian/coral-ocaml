@@ -1,26 +1,25 @@
 func printf : Void (fmt: String, ...)
 func strlen : Int64 (s: String)
 
-func returnsInt():
+func constantThree():
   let a = 1
   let b = 2
   a + b
 
 # How do we decide whether takesInt is "int->int" or "T -> U: where `+`(T, int, U)" ?
 # Maybe for non-generic functions, monomorphize when possible?
-# Definitely do not monomorphise when multiple candidate are available:
-# i.e. a + b does not monomorphize to int->int like Haskell
-func takesInt(n):
-  n + 1
+# Definitely do not monomorphise when multiple candidate are available
+func addTen(n):
+  n + 10
 
-func takesIntAlso(c):
-  1 + takesInt c
+func addTwenty(c):
+  addTen (addTen c)
 
-func returnsString: String():
+func returnsString():
   "a"
 
-printf ("%s\n", "Hello, World!")
-printf ("%s\n", returnsString ())
-printf ("%ld\n", strlen "beef")
-printf ("%ld\n", takesIntAlso 10)
-printf ("%ld\n", returnsInt())
+printf ("%s\n", "string->literal")
+printf ("constantString: %s\n", returnsString ())
+printf ("strlen: %ld\n", strlen "beef")
+printf ("addTwenty: %ld\n", addTwenty 10)
+printf ("constantThree: %ld\n", constantThree ())

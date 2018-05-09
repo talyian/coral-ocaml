@@ -40,6 +40,6 @@ let print_tokens lexbuf =
     | OPERCMP (n) -> print_string n; loop ctx
     | EQ -> print_string "="; loop ctx
     | _ -> printf "unhandled token `%s`" (Lexing.lexeme lexbuf)
-  in loop {tokenqueue=[]; indents=[0]}
+  in loop {tokenqueue=[]; indents=[0]; nestlevel=0}
 
-let token = expand_tokens Lexer.coral_token {tokenqueue=[]; indents=[0]}
+let token = expand_tokens Lexer.coral_token {tokenqueue=[]; indents=[0]; nestlevel=0}

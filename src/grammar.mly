@@ -25,11 +25,11 @@ main
   | x=lines e=expr EOF { Module(make_module @@ x @ [e]) }
 
 line
-  : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block
+  : FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN body=block_or_line
     { Func(newFunc (name, Type(""), p, body)) }
   | FUNC name=IDENTIFIER LPAREN p=paramlist RPAREN NEWLINE
     { Func(newFunc (name, Type(""), p, Empty)) }
-  | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN body=block
+  | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN body=block_or_line
     { Func(newFunc (name, ret, p, body)) }
   | FUNC name=IDENTIFIER COLON ret=typedef LPAREN  p=paramlist RPAREN NEWLINE
     { Func(newFunc (name, ret, p, Empty)) }
@@ -73,8 +73,8 @@ expr_atom
 expr_op_unit
   : e=expr_atom { e }
   | callee=expr_atom LPAREN args=exprlist RPAREN { Call (callNode callee args) }
-  | callee=expr_op_unit LPAREN RPAREN { Call (callNode callee []) }
-  | callee=expr_op_unit arg=expr_atom { Call (callNode callee [arg]) }
+  | callee=expr_atom LPAREN RPAREN { Call (callNode callee []) }
+  | callee=expr_atom arg=expr_atom { Call (callNode callee [arg]) }
 
 expr0
   : e=expr_op_unit { e }
@@ -104,12 +104,16 @@ paramlist
   : e=non_empty_paramlist { e }
   | { [] }
 non_empty_paramlist
-  : p=param { [p] }
-  | x=paramlist COMMA p=param { x@[p] }
+  : NEWLINE? INDENT? p=param { [p] }
+  | x=paramlist COMMA NEWLINE? INDENT? p=param { x@[p] }
 
 typedef
   : e=IDENTIFIER { Type e }
   | ELLIPSIS { Type "..." }
+  | e=IDENTIFIER LBRACKET params=typedefList RBRACKET { Parameterized(e, params) }
+typedefList
+  : typedef { [$1] }
+  | td=typedef COMMA rest=typedefList { td::rest }
 
 member
 : base=expr_atom DOT member=IDENTIFIER

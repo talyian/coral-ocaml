@@ -1,0 +1,27 @@
+# asdf
+func printf: Void(fmt:Ptr, ...)
+func i32_l: Int32(v:Int64)
+func i32_s: Int32(v:String)
+func i32: Int32(v:Int64): i32_l v
+func i32: Int32(v:String): i32_s v
+
+# I think these nodes are being reduced
+# with value equality, so v:Int64 gets merged into a single
+# term :/
+
+# func ptr:Ptr[Int64] (v:Int64): v
+# func ptr[T]: Ptr[T](v:T)
+
+# func pcre2_compile_8:Ptr(
+#   pattern:String, len:Int64,
+#   flag:Int32,
+#   code:Ptr[Int32], offset:Ptr[Int64],
+#   context:Ptr[Int64])
+
+printf("Pcre Example\n")
+# let i = 1234568791234
+# let code = i32 0
+# let pcode = addrof code
+let offset = 0
+let poffset = addrof offset
+# let pat = pcre2_compile_8("foo", 3, i32 0, pcode, poffset, ptr 0)

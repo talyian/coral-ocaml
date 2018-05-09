@@ -4,7 +4,11 @@ open Lexing
 type lexContext = {
   mutable indents: int list;
   mutable tokenqueue: Grammar.token list;
+  mutable nestlevel: int;
 }
+
+let nest ctx = ctx.nestlevel <- ctx.nestlevel + 1
+let unnest ctx = ctx.nestlevel <- ctx.nestlevel - 1
 
 let parse_operator tok =
   match tok with
@@ -27,12 +31,12 @@ rule coral_token ctx = parse
   | '-'? ['0'-'9']+ '.' ['0'-'9']+ as tok { [Grammar.FLOAT(tok)] }
   | '"' { [string_token (Buffer.create 1024) lexbuf] }
   | '.' { [Grammar.DOT] }
-  | '(' { [Grammar.LPAREN] }
-  | ')' { [Grammar.RPAREN] }
-  | '{' { [Grammar.LBRACE] }
-  | '}' { [Grammar.RBRACE] }
-  | '[' { [Grammar.LBRACKET] }
-  | ']' { [Grammar.RBRACKET] }
+  | '(' { nest ctx; [Grammar.LPAREN] }
+  | ')' { unnest ctx; [Grammar.RPAREN] }
+  | '{' { nest ctx; [Grammar.LBRACE] }
+  | '}' { unnest ctx; [Grammar.RBRACE] }
+  | '[' { nest ctx; [Grammar.LBRACKET] }
+  | ']' { unnest ctx; [Grammar.RBRACKET] }
   | ',' { [Grammar.COMMA] }
   | ':' { [Grammar.COLON] }
   | '#' { comment ctx lexbuf }
@@ -43,11 +47,11 @@ rule coral_token ctx = parse
         pos_bol = lexbuf.lex_start_pos + 1;
         pos_lnum = lexbuf.lex_curr_p.pos_lnum + 1
      };
-     (Grammar.NEWLINE(String.length tok) :: (match ctx.indents with
-       | n :: xs when n < indent_len ->
+     let indents = match ctx.nestlevel, ctx.indents with
+       | 0, n :: xs when n < indent_len ->
            ctx.indents <- indent_len :: ctx.indents;
            [Grammar.INDENT]
-       | n :: xs when n > indent_len ->
+       | 0, n :: xs when n > indent_len ->
            let rec pop dedents =
               match ctx.indents with
               | n :: xs when n > indent_len ->
@@ -55,8 +59,8 @@ rule coral_token ctx = parse
                   pop (Grammar.DEDENT :: dedents)
               | _ -> dedents
            in pop []
-       | _ -> []
-     ))
+       | _ -> [] in
+     (Grammar.NEWLINE(String.length tok) :: indents)
   }
   | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }
   | "..." { [Grammar.ELLIPSIS] }
