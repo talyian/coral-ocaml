@@ -14,5 +14,5 @@ func loop (a, b):
   fizzbuzz a
   if a < b: loop(a + 1, b)
 
-loop (1, 50)
+loop (1, 15)
 printf "\n"

@@ -1,0 +1,9 @@
+func printf : Void (...)
+
+func foo(v):
+  v + 1
+
+func bar(v):
+  v + 3.0
+
+printf("def test: %ld %g", foo 3, bar 3.5)
