@@ -100,13 +100,16 @@ module GraphF =
   let rec findTermByValue graph node =
     match graph.terms
           |> StringMap.bindings
-          |> List.find_opt (function
+          |> List.filter (function
              | name, {value=n} when Node.cmp n node = 0 && n <> Node.empty -> true
              | _ -> false) with
-    | None ->
+    | [a, b] -> b
+    | [] ->
        showColor (3, 2, 2) graph;
        failwith (Printf.sprintf "not found: (%s)" (Node.show node))
-    | Some(a, b) -> b
+    | _ ->
+       showColor (3, 2, 2) graph;
+       failwith (Printf.sprintf "multiple bindings: (%s)" (Node.show node))
   let addTerm graph name node =
     let rec add_loop i =
       let newname = match i with

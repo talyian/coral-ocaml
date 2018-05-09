@@ -4,9 +4,9 @@ open Ast
 
 module Graph = Type_graph_2.GraphF(struct
   type t = Ast.node
-  let show n = Ast.nodeName n
+  let show n = Ast.string_of_node n
   let empty = Ast.Empty
-  let cmp = compare
+  let cmp a b = if a == b then 0 else -1
 end)
 
 let rec type_to_constraint = function
@@ -141,7 +141,7 @@ let rec createGraph g node =
      let term, gg = Graph.addTerm g ("s" ^ Ast.string_name_escape s) snode in
      let gg = Graph.constrain gg term (Graph.Type ("String", [])) in
      term, gg
-  | TupleDef info ->
+  | TupleDef info as tt ->
      let fold_field (terms, gg) (fname, ftype) =
        let field_term, graph =
          let name = "(MemberType) " ^ info.name ^ "::" ^ fname in
@@ -154,7 +154,7 @@ let rec createGraph g node =
        let graph = Graph.constrain graph index_term (Graph.Type (index, [])) in
        field_term :: terms, graph in
      let fields, graph = List.fold_left fold_field ([], g) info.fields in
-     let tuple_term, graph = Graph.addTerm graph info.name (TupleDef info) in
+     let tuple_term, graph = Graph.addTerm graph info.name tt in
      let graph =
        let field_types = List.map (fun (t:Graph.term) -> Graph.Term t.name) fields in
        let ret_type = Graph.Type (info.name, []) in
