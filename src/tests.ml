@@ -48,3 +48,6 @@ let main_test = "Tests" >::: [
  "tuples" >:: parse_test "test_cases/core/tuples.coral";
  "def-uniqueness" >:: output_test "def test: 4 6.5" "test_cases/core/def.coral";
 ]
+
+
+let () = run main_test
