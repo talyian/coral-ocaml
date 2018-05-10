@@ -1,0 +1,6 @@
+sudo: enable
+language: ocaml
+install:
+  - docker build -t coral-ocaml .
+script:
+  - docker run --rm coral-ocaml bash -i -c "make test"
