@@ -27,6 +27,7 @@ rule coral_token ctx = parse
   | "else" { [Grammar.ELSE] }
   | "return" { [Grammar.RETURN] }
   | "=" { [Grammar.EQ] }
+  | '-'? '0' 'x' ['0'-'9']+ as tok { [Grammar.INTEGER(tok)] }
   | '-'? ['0'-'9']+ as tok { [Grammar.INTEGER(tok)] }
   | '-'? ['0'-'9']+ '.' ['0'-'9']+ as tok { [Grammar.FLOAT(tok)] }
   | '"' { [string_token (Buffer.create 1024) lexbuf] }

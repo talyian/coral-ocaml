@@ -27,7 +27,7 @@ module GraphF =
              end) -> struct
 
   type configTy = { mutable debug: bool }
-  let config = { debug = false }
+  let config = { debug = true }
   type cons =
     | Free of int
     | Term of string
@@ -327,9 +327,9 @@ module GraphF =
            arg1, params in
 
        if List.length arg1 <> List.length params then
-         Fail (Printf.sprintf "type mismatch %d %d"
-                 (List.length arg1 )
-                 (List.length params))
+         Fail (Printf.sprintf "type mismatch %s %s"
+                 (cons_to_string (Type("Func", params)))
+                 (cons_to_string (Type("Args", arg1))))
        else
          unify_zip graph tt arg1 params
     | (Type _ as cons1, (Call (OneOf options, args, overload) as call))

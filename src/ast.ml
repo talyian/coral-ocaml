@@ -53,10 +53,13 @@ type 'a memberInfo = {
 type 'a callInfo = {
   callee: 'a;
   args: 'a list;
+  name: string;
   (* The type solver sets this if the callee is a multifunc *)
+  mutable coraltype: coraltype option;
   mutable overloadIndex: int;
 }
-let callNode callee args = {callee=callee;args=args;overloadIndex=0}
+
+let callNode callee args = {name="?";callee=callee;args=args;overloadIndex=0;coraltype=None}
 
 let make_module lines = {name="module"; lines=lines}
 
@@ -65,7 +68,7 @@ type node =
   | Func of node funcInfo
   | Multifunc of string * (node funcInfo) list
   | Comment of (string)
-  | Binop of (string * node * node)
+  | Binop of node callInfo
   | If of (node * node * node)
   | IntLiteral of string
   | FloatLiteral of string
@@ -155,7 +158,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
     | IntLiteral n -> Format.fprintf fmt "%s" n
     | FloatLiteral n -> Format.fprintf fmt "%s" n
     | Comment c -> Format.fprintf fmt "# %s" c
-    | Binop(op, lhs, rhs) ->
+    | Binop {name=op; args=[lhs;rhs]} ->
        show1 0 true lhs;
        Format.fprintf fmt " %s " op;
        show1 0 true rhs;
@@ -211,8 +214,18 @@ let rec pprint1 fmt indent (is_inline:bool) node =
     | Member mem ->
        show1 0 true mem.base;
        Format.fprintf fmt ".%s" mem.memberName;
+    | _ -> failwith "unhandled"
     );
     if not is_inline then printf "\n"
+
+
+let binop (op, lhs, rhs) = Binop {
+  name=op;
+  callee=Empty;
+  args=[lhs;rhs];
+  coraltype=None;
+  overloadIndex=0
+}
 
 let show = pprint1 Format.std_formatter 0 false
 let string_of_node x =

@@ -1,7 +1,5 @@
 open OUnit2
 
-external hellow : unit -> unit = "hellow"
-
 (* the main entry point for tests *)
 let run test = test
   |> OUnit2.run_test_tt_main

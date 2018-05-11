@@ -35,7 +35,7 @@ let rec run1 scope = function
      ignore (run1 scope ifbody);
      ignore (run1 scope elsebody);
      scope, x
-  | Binop(op, lhs, rhs) as x ->
+  | Binop {name=op;args=[lhs;rhs]} as x ->
      ignore (run1 scope lhs);
      ignore (run1 scope rhs);
      scope, x
@@ -69,4 +69,5 @@ let rec run1 scope = function
      let scope, _ = run1 scope mem.base in scope, member
   | Return {node=v} as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
+  | _ -> failwith "unhandled"
 let run x = snd (run1 {parent=None; names=StringMap.empty} x)

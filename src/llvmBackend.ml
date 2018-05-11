@@ -170,13 +170,18 @@ and run_func context =
      Llvm.const_int (Llvm.i32_type context.context) 0;
   | IntLiteral n -> Llvm.const_int (Llvm.i64_type context.context) (int_of_string n)
   | FloatLiteral n -> Llvm.const_float (Llvm.double_type context.context) (float_of_string n)
-  | Binop(op, lhs, rhs) ->
+  | Binop {name=op; args=[lhs; rhs]} ->
      let get_value = function
-       (* | Var v -> Llvm.build_load (run_func context (Var v)) v.name context.builder *)
        | node -> run_func context node in
      let lval = get_value lhs in
      let rval = get_value rhs in
-     if Llvm.type_of lval = Llvm.double_type context.context then
+     if Llvm.type_of lval = Llvm.pointer_type (Llvm.i8_type context.context) then
+       match op with
+       | "+" -> Llvm.build_gep lval [| rval |] "" context.builder
+       | "-" -> let rval = Llvm.build_neg rval "" context.builder in
+                Llvm.build_gep lval [| rval |] "" context.builder
+       | _ -> failwith "bad operator on pointer"
+     else if Llvm.type_of lval = Llvm.double_type context.context then
          (match op with
          | "<" -> Llvm.build_fcmp Fcmp.Ult lval rval "" context.builder
          | "<=" -> Llvm.build_fcmp Fcmp.Ule lval rval "" context.builder
@@ -214,7 +219,7 @@ and run_func context =
          Llvm.build_ret_void context.builder
       | {node=value} -> Llvm.build_ret (run_func context value) context.builder)
   | (* Implement ADDROF: this is kind of sketchy *)
-    Call {callee=Var ({name="addrof"; target=None} as callee); args=[Var arg]} ->
+    Call {callee=Var ({name="addrof"; target=None}); args=[Var arg]} ->
      (* Printf.printf "var: %s of %s\n" callee.name arg.name; *)
      (match arg.target with
       | None -> failwith "(null)\n"
@@ -222,6 +227,17 @@ and run_func context =
          match AstMap.find_opt decl context.llvalues with
          | None -> failwith "(invalid reference)\n"
          | Some(target) -> target)
+  | (* Implement deref: this is kind of sketchy *)
+    Call {callee=Var ({name="deref"; target=None} as callee); args=[arg]; coraltype=tt} ->
+     let llptr = run_func context arg in
+     Llvm.build_load llptr "*" context.builder
+  | (* Implement deref: this is kind of sketchy *)
+    Call {callee=Var ({name="ptr_cast"; target=None} as callee);
+          args=[arg];
+          coraltype=Some(Ast.Parameterized ("%call", [x; y]))} ->
+     let llptr = run_func context arg in
+     let target_type = llvmType context.llmodule context.context y in
+     Llvm.build_pointercast llptr target_type "cast" context.builder
   | (* Tuple construction *)
     Call {callee=Var {target=Some(TupleDef tuple)}; args=args} ->
      (match Llvm.type_by_name context.llmodule tuple.name with
@@ -235,17 +251,11 @@ and run_func context =
   | Call {callee=callee; args=args} ->
      let llcallee = (run_func context callee) in
      let llargs = List.map (run_func context) args |> Array.of_list in
-     (* Printf.printf "%s\n" (as_rgb (5, 0, 0) "calling ");
-      * Ast.show callee;
-      * let rec loop = function
-      *   | [] -> ()
-      *   | x :: xs -> print_char '('; Ast.show x; print_char ')'; loop xs in loop args; *)
      (match Llvm.classify_value llcallee with
       | Llvm.ValueKind.Function -> Llvm.build_call llcallee llargs "" context.builder
-      | _ ->
-         Printf.printf ("Failed to find function: \n");
-         Ast.show callee;
-         llcallee)
+      | _ -> Printf.printf ("Failed to find function: \n");
+             Ast.show callee;
+             llcallee)
   | Var v_info ->
      (match v_info.target with
       | Some(Let (var, value) as letnode) ->
@@ -301,11 +311,13 @@ and run_func context =
 let jit coralModule =
   let llmodule = run1 (AstMap.empty) coralModule in
 
-  (* Llvm.string_of_llmodule llmodule |> print_endline;
-   * flush stdout; *)
-
   (* TODO: we're generating untyped operations with implicit casts *)
-  (* Llvm_analysis.assert_valid_module llmodule; *)
+  (match Llvm_analysis.verify_module llmodule with
+   | None -> ()
+   | Some(e) ->
+      Printf.printf "%s\n" @@ Llvm.string_of_llmodule llmodule;
+      Printf.printf "%s\n" (Ansicolor.as_color (Bold RED) e);
+      flush stdout);
 
   let passmgrbuilder = Llvm_passmgr_builder.create () in
   let module_passmgr = Llvm.PassManager.create () in

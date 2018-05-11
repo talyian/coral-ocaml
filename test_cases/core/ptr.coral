@@ -1,19 +1,36 @@
 ##option nostdlib, cstring-literals, c-load foobar sdl2
-
 func printf: Void(fmt:Ptr, ...)
 
 func i32_l: Int32(v:Int64)
 func i32_s: Int32(v:String)
 func i32: Int32(v:Int64): i32_l v
 func i32: Int32(v:String): i32_s v
-func i64_p: Int64(v:Ptr)
+
+# # we can custom-codegen code here
+# func ptr_cast_1[U, T]: Ptr[U](Ptr[T] input)
+
+# # can we create new free typevars like this?
+# func ptr_cast[U] (x):
+#   ptr_cast_1[U, _] x
 
 printf ("Ptr Test\n")
-let a = 1
-let b = i32 2
-printf ("&a: %p\n", addrof a)
-printf ("&b: %p\n", addrof b)
+let a = 0x1234500054321
+let b = i32 0x88888
+let c = i32 0x31337
+let a_ptr = addrof a
+let b_ptr = addrof b
 
-let s = "the fast red dog drives a blue convertible"
-printf("%s\n", s)
-printf("%s\n", s + 4 - 2)
+printf ("&a: %p\n", a_ptr)
+printf ("&b: %p\n", b_ptr)
+printf ("a: %lx\n", deref a_ptr)
+
+let a_ptr_2:Ptr[Int32] = ptr_cast a_ptr
+
+printf ("a (hacky truncation): %x\n", deref a_ptr)
+printf ("a (good truncation): %x\n", deref a_ptr_2)
+printf ("b: %x\n", deref b_ptr)
+printf ("c: %x\n", addrof c)
+
+let s = "The fast red dog drives a blue Jeep"
+printf("[%s]\n", s)
+printf("[%.*s]\n", 7, s + 3 * 3)

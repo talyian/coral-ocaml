@@ -20,7 +20,7 @@ let parse name lexbuf =
   |> Init_func.run
   |> Name_resolver.run
   |> Type_resolver.run
-  (* |> Ansicolor.tee (Ast.show) *)
+  |> Ansicolor.tee (fun x -> Ast.show x; flush stdout; x)
 
 let tokenize_file filename =
   open_in filename |> Lexing.from_channel |> LexerInterface.print_tokens

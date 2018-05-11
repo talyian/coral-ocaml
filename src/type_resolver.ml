@@ -104,7 +104,7 @@ let rec createGraph g node =
      let term, gg = Graph.addTerm g ("f" ^ i) inode in
      let gg = Graph.constrain gg term (Graph.Type ("Float64", [])) in
      term, gg
-  | Binop (op, lhs, rhs) as binop ->
+  | Binop {name=op;args=[lhs;rhs]} as binop ->
      let term, gg = Graph.addTerm g ("op." ^ op) binop in
      let lterm, gg = createGraph gg lhs in
      let rterm, gg = createGraph gg rhs in
@@ -118,7 +118,7 @@ let rec createGraph g node =
      (match info.target with
       | None ->
          (match Graph.findTerm g ("global::" ^  info.name) with
-          | None -> 
+          | None ->
              let msg = "Type Warning: missing reference: " ^ (info.name) in
              Printf.printf "%s\n" (Ansicolor.as_color (Color YELLOW) msg);
              failwith "oops"
@@ -140,10 +140,15 @@ let rec createGraph g node =
      let argterms, gg = List.fold_left fold ([], gg) @@ List.rev args in
      let term, gg = Graph.addTerm gg ("call." ^ calleeterm.name) call in
      let gg =
+       (* Call terms get generated as Call(callee, args, instantiation_term,overload_term) *)
        let c1 = Graph.Term calleeterm.name in
        let c2 = List.map (fun (t:Graph.term) -> Graph.Term t.name) argterms in
        let overload_idx, gg = Graph.addTerm gg ("overload." ^ calleeterm.name) call in
-       Graph.constrain gg term (Graph.Call (c1, c2, Graph.Term overload_idx.name)) in
+       let inst_term, gg = Graph.addTerm gg ("inst." ^ calleeterm.name) call in
+       let gg = Graph.constrain gg term (Graph.Call (c1, c2, Graph.Term overload_idx.name)) in
+       let inst_params = c2 @ [Graph.Term term.name] in
+       let gg = Graph.constrain gg inst_term (Graph.Type ("%call", inst_params)) in
+       gg in
      term, gg
   | StringLiteral s as snode ->
      let term, gg = Graph.addTerm g ("s" ^ Ast.string_name_escape s) snode in
@@ -173,7 +178,11 @@ let rec createGraph g node =
      let value, gg = createGraph g rhs in
      let term, gg = Graph.addTerm gg var.name letexpr in
      let gg = Graph.constrain gg term (Term value.name) in
-     term, gg
+     let result = match var.varType with
+       | None -> term, gg
+       | Some(vartype) ->
+          term, Graph.constrain gg term (type_to_constraint vartype) in
+     result
   | Member mem as member ->
      let baseterm, gg = createGraph g mem.base in
      let term, gg = Graph.addTerm gg (baseterm.name ^ "::" ^ mem.memberName) member in
@@ -219,7 +228,7 @@ let applySolution gg m =
       | Binop _ -> ()
       | If _ -> ()
       | Tuple _ -> () (* TODO: we need to populate these *)
-      | Call {callee=Var ({target=Some(Multifunc (mf_name, mf_funcs))} as cinfo)} ->
+      | Call ({callee=Var ({target=Some(Multifunc (mf_name, mf_funcs))} as cinfo)} as call) ->
          (match cons with
           | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
              let idx = int_of_string index_str in
@@ -229,6 +238,16 @@ let applySolution gg m =
            Printf.printf "%s (%s) --> %s\n"
              (Ansicolor.as_color (Bold YELLOW) term.name)
              (Ast.nodeName term.value) (Graph.cons_to_string cons);
+      | Call call ->
+         (match cons with
+          | Graph.Type ("%call", params) as cons ->
+             call.coraltype <- Some(constraint_to_type cons);
+             ()
+          | _ ->
+         if Graph.config.debug then
+           Printf.printf "%s (%s) --> %s\n"
+             (Ansicolor.as_color (Bold GREEN) term.name)
+             (Ast.nodeName term.value) (Graph.cons_to_string cons))
       | _ ->
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n" (Ansicolor.as_color (Bold CYAN) term.name)
@@ -248,11 +267,21 @@ let run m =
   let gg = List.fold_left (fold_op_is arith_op_type) gg ["+"; "*"; "-"; "/"; "%"] in
   let gg = List.fold_left (fold_op_is bool_op_type) gg ["="; "<";">"; ">="; "<="; "!="] in
   let gg =
-    let tt, gg = Graph.addTerm gg "global::addrof" Empty in
     let free = Graph.Free 0 in
+    let free1 = Graph.Free 1 in
+    let tt, gg = Graph.addTerm gg "global::addrof" Empty in
     let gg = Graph.constrain gg tt (
                  Graph.Type("Func", [free; Graph.Type("Ptr", [free])])) in
-    gg in
+
+    let tt, gg = Graph.addTerm gg "global::deref" Empty in
+    let gg = Graph.constrain gg tt (
+                 Graph.Type("Func", [Graph.Type("Ptr", [free]); free])) in
+    let tt, gg = Graph.addTerm gg "global::ptr_cast" Empty in
+    let cons =
+      let pt = Graph.Type("Ptr", [free]) in
+      let pu = Graph.Type("Ptr", [free1]) in
+      Graph.Type("Func", [pt; pu]) in
+    Graph.constrain gg tt cons in
   (* Ast.show m; *)
   let term, graph = createGraph gg m in
   if Graph.config.debug then Graph.show graph;

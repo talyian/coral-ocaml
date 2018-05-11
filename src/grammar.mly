@@ -38,7 +38,8 @@ line
 
 func_name
   : IDENTIFIER { $1 }
-  | IDENTIFIER LBRACKET typedef RBRACKET { $1}
+  | IDENTIFIER LBRACKET typedef RBRACKET { $1 }
+
 func_return : COLON ret=typedef { ret }
 func_params : LPAREN p=paramlist RPAREN { p }
 func_body   : block_or_line { $1 } | NEWLINE { Empty }
@@ -70,6 +71,8 @@ expr_atom
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
+  | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET
+      { Var {name=e; target=None; varType=None} }
   | e=STRING { StringLiteral e }
   | LPAREN e=expr2 RPAREN { e }
   | e=member { Member e }
@@ -82,17 +85,17 @@ expr_op_unit
 
 expr0
   : e=expr_op_unit { e }
-  | lhs=expr0 op=OPERMUL rhs=expr0 { Binop(op, lhs, rhs) }
+  | lhs=expr0 op=OPERMUL rhs=expr0 { binop (op, lhs, rhs) }
 
 expr1
   : e=expr0 { e }
-  | lhs=expr1 op=OPERADD rhs=expr1 { Binop(op, lhs, rhs) }
-  | lhs=expr1 op=OPERATOR rhs=expr1 { Binop(op, lhs, rhs) }
+  | lhs=expr1 op=OPERADD rhs=expr1 { binop(op, lhs, rhs) }
+  | lhs=expr1 op=OPERATOR rhs=expr1 { binop(op, lhs, rhs) }
 
 expr2
   : e=expr1 { e }
-  | l=expr2 o=OPERCMP r=expr2 { Binop (o, l, r) }
-  | l=expr2 EQ r=expr2 { Binop ("=", l, r) }
+  | l=expr2 o=OPERCMP r=expr2 { binop (o, l, r) }
+  | l=expr2 EQ r=expr2 { binop ("=", l, r) }
 
 expr : e=expr2 { e }
 
