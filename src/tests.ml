@@ -17,7 +17,10 @@ let output_test expected_output file ctxt =
          exit 0;
   | pid ->
      let child_output =
-       ignore @@ Unix.wait ();
+       let rec final_output () =
+         match Unix.waitpid [ ] pid with
+         | (pid, Unix.WEXITED n) -> n
+         | _ -> final_output () in
        let len = 1024 in
        let buf = Bytes.create len in
        let read = Unix.read input buf 0 len in

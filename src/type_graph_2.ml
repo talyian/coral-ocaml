@@ -27,7 +27,7 @@ module GraphF =
              end) -> struct
 
   type configTy = { mutable debug: bool }
-  let config = { debug = true }
+  let config = { debug = false }
   type cons =
     | Free of int
     | Term of string

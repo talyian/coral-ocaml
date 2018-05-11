@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
+#define PCRE2_CODE_UNIT_WIDTH 0
+#include <pcre2.h>
 
 int64_t hellow() {
   printf("Hello, World!\n");

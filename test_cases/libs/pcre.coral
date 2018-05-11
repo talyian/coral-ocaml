@@ -1,22 +1,50 @@
-# asdf
+# TODO fix some pointer arithmetic issues
+
 func printf: Void(fmt:Ptr, ...)
 func i32_l: Int32(v:Int64)
 func i32_s: Int32(v:String)
 func i32: Int32(v:Int64): i32_l v
 func i32: Int32(v:String): i32_s v
 
-func addrof: Ptr[Int64](v:Int64)
+func strlen: Int64(s:String)
+func malloc: Ptr[Int8](len:Int64)
+func free: Void(ptr: Ptr[Int8])
 
-# func pcre2_compile_8:Ptr(
-#   pattern:String, len:Int64,
-#   flag:Int32,
-#   code:Ptr[Int32], offset:Ptr[Int64],
-#   context:Ptr[Int64])
+func pcre2_compile_8:Ptr(
+  pattern:String, len:Int64,
+  flag:Int32,
+  code:Ptr[Int32], offset:Ptr[Int64],
+  context:Int64)
+
+func pcre2_get_error_message_8: Int32(Int32, Ptr, Int64)
+func pcre2_match_data_create_8: Int64(len:Int32, context:Int64)
+func pcre2_match_8: Int32(pattern:Ptr,
+  subject:String, len:Int64, start:Int64,
+  flags:Int32, data:Int64, context:Int64)
+func pcre2_get_ovector_pointer_8: Ptr[Int64](data:Int64)
+
+func loop(pattern, subject, data, start):
+  let rc = pcre2_match_8(pattern, subject, strlen subject, start, i32 0, data, 0)
+  if rc > 0:
+    let ovec = pcre2_get_ovector_pointer_8(data)
+    let start = deref ovec
+    let end = deref (ovec + 8)
+    printf("[%d-%d] '%.*s'\n", start, end, end - start, subject + start)
+    loop(pattern, subject, data, end)
 
 printf("Pcre Example\n")
-# let i = 1234568791234
-# let code = i32 0
-# let pcode = addrof code
+let code = i32 0
 let offset = 0
-let poffset = addrof offset
-# let pat = pcre2_compile_8("foo", 3, i32 0, pcode, poffset, ptr 0)
+let pat = "\w+"
+let errbuf = malloc 200
+let pattern = pcre2_compile_8(pat, strlen pat, i32 0, addrof code, addrof offset, 0)
+if code > i32 100:
+  let errbuf = malloc 200
+  pcre2_get_error_message_8(code, errbuf, 60)
+  printf("Error: %s\n", errbuf)
+  free errbuf
+else:
+  let subject = "  The fast brown dog drives a green convertible"
+  let data = pcre2_match_data_create_8(i32 10, 0)
+  printf("Pattern: %s\n", pat)
+  loop (pattern, subject, data, 0)

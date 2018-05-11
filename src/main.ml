@@ -3,9 +3,12 @@ open CoralModule
 external hellow : unit -> unit = "hellow"
 
 let () =
-  (* Tests.run Tests.main_test; *)
-  run @@ parse_file "test_cases/core/ptr.coral";
-  exit 0;
+  match Sys.argv with
+  | [| _; filename |] ->   run @@ parse_file filename;
+  | _ ->
+     (* Tests.run Tests.main_test; *)
+     run @@ parse_file "test_cases/libs/pcre.coral";
+     exit 0;
   (* run @@ parse_file "test_cases/libs/pcre.coral";
    * exit 0; *)
   (* tokenize_file "test_cases/core/polymorphism_adhoc.coral"; *)

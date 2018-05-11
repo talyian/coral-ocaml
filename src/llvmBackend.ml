@@ -95,7 +95,7 @@ and generate_function lvContext lvModule llvalues = function
        |> List.map (function
               | Def (v) -> (* HACK: why are we defaulting to int32 here? *)
                  llvmType lvModule lvContext (default (Type "Int32") v.defType)
-              | _ -> failwith "oops")
+              | _ -> failwith "genfunc params: oops")
        |> Array.of_list in
      let func_type =
        if vararg then

@@ -71,8 +71,8 @@ expr_atom
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
-  | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET
-      { Var {name=e; target=None; varType=None} }
+  /* | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET */
+  /*     { Var {name=e; target=None; varType=None} } */
   | e=STRING { StringLiteral e }
   | LPAREN e=expr2 RPAREN { e }
   | e=member { Member e }

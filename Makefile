@@ -6,6 +6,7 @@ ALLFILES=src/grammar.mly src/lexer.mll src/lexerInterface.ml \
 
 BUILD_CMD=echo "target: [$@] "; ocamlbuild -verbose 1 -use-ocamlfind -use-menhir -I src $@ \
 	-lflags -cclib,src/foobar.o \
+	-lflags -cclib,-lpcre2-8 \
 	-tag debug \
 	-package llvm \
 	-package ctypes \
