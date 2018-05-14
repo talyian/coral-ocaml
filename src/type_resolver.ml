@@ -47,7 +47,7 @@ let rec createGraph g node =
          blockterm, gg)
   | Multifunc (name, fdata_list) as mfunc ->
      let terms, graph =
-       let folder (tt, gg) f = let fterm, gg = createGraph gg (Func f) in fterm :: tt, gg in
+       let folder (tt, gg) f = let fterm, gg = createGraph gg f in fterm :: tt, gg in
        List.fold_left folder ([], g) fdata_list in
      let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
      let graph =
@@ -232,7 +232,7 @@ let applySolution gg m =
          (match cons with
           | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
              let idx = int_of_string index_str in
-             cinfo.target <- Some(Func (List.nth mf_funcs idx))
+             cinfo.target <- Some(List.nth mf_funcs idx)
           | _ -> ());
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n"

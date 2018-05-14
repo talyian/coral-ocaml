@@ -28,7 +28,7 @@ let rec run1 scope = function
      scope, f
   | Multifunc (name, funcs) as mf ->
      let mf_scope = addName name mf scope in
-     List.map (fun f -> run1 mf_scope (Func f)) funcs |> ignore;
+     List.map (run1 mf_scope) funcs |> ignore;
      mf_scope, mf
   | If(cond, ifbody, elsebody) as x ->
      ignore (run1 scope cond);

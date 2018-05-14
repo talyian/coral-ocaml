@@ -64,7 +64,7 @@ let rec run1 llvalues = function
           looper llvalues xs
        | Multifunc (name, func_list) :: xs ->
           let llvalues = List.fold_left
-            (fun lv f -> generate_function lvContext lvModule lv (Func f))
+            (fun lv f -> generate_function lvContext lvModule lv f)
             llvalues
             func_list in
           looper llvalues xs

@@ -6,14 +6,16 @@ let rec find_function = function
   | Module m -> Module {m with lines=List.map find_function m.lines}
   | Multifunc (name, funcs) ->
      Multifunc (name, List.map rewrite_function funcs)
-  | Func data -> Func(rewrite_function data)
+  | Func _ as f -> rewrite_function f
   | n -> n
 
-and rewrite_function {name=name; ret_type=ret_type; params=params; body=body} =
-  if body = Empty then
-    newFunc(name, ret_type, params, Empty)
-  else
-    newFunc(name, ret_type, params, rewrite ret_type body)
+and rewrite_function = function
+  | Func {name=name; ret_type=ret_type; params=params; body=body} ->
+     if body = Empty then
+       Func (newFunc(name, ret_type, params, Empty))
+     else
+       Func (newFunc(name, ret_type, params, rewrite ret_type body))
+  | _ -> failwith "expected function"
 
 and rewrite retType = function
   | If (cond, ifbody, elsebody) ->

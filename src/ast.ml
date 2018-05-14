@@ -66,7 +66,7 @@ let make_module lines = {name="module"; lines=lines}
 type node =
   | Module of node moduleInfo
   | Func of node funcInfo
-  | Multifunc of string * (node funcInfo) list
+  | Multifunc of string * node list
   | Comment of (string)
   | Binop of node callInfo
   | If of (node * node * node)
@@ -127,7 +127,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
   | Multifunc (name, funcs) ->
-     List.iter (show1 indent is_inline) (List.map (fun f -> Func f) funcs)
+     List.iter (show1 indent is_inline) funcs
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
       | Type "" -> Format.fprintf fmt "func %s(" name
