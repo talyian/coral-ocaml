@@ -22,14 +22,16 @@ let rec constraint_to_type = function
   | Graph.Type(s, params) -> Ast.Parameterized(s, List.map constraint_to_type params)
   | c -> failwith ("unhandled type: " ^ Graph.cons_to_string c)
 
-let rec createGraph g node =
+(* createGraph over a list of terms *)
+let rec foldGraphr g terms =
+  let folder (terms, g) node = let term, g = createGraph g node in term::terms, g in
+  List.fold_left folder ([], g) terms
+
+and createGraph g node =
   match node with
   | Empty -> Graph.addTerm g "empty" Empty
   | Module modinfo as m ->
-     let fold (terms, g) a =
-       let (t, g) = createGraph g a in
-       (t::terms, g) in
-     let terms, gg = List.fold_left fold ([], g) modinfo.lines in
+     let terms, gg = foldGraphr g modinfo.lines in
      Graph.addTerm gg "module" m
   | Block list as block ->
      let blockterm, gg = Graph.addTerm g "block" block in
@@ -39,16 +41,11 @@ let rec createGraph g node =
          blockterm, gg
       | [n] -> createGraph gg n
       | list ->
-         let fold (terms, g) a =
-           let (t, g) = createGraph g a in
-           (t::terms, g) in
-         let terms, gg = List.fold_left fold ([], gg) list in
+        let terms, gg = foldGraphr gg list in
          let gg = Graph.constrain gg blockterm (Graph.Term (List.hd terms).name) in
          blockterm, gg)
   | Multifunc (name, fdata_list) as mfunc ->
-     let terms, graph =
-       let folder (tt, gg) f = let fterm, gg = createGraph gg f in fterm :: tt, gg in
-       List.fold_left folder ([], g) fdata_list in
+     let terms, graph = foldGraphr g fdata_list in
      let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
      let graph =
        let terms = List.rev terms in
@@ -57,10 +54,7 @@ let rec createGraph g node =
        Graph.constrain graph mfunc_term mfunc_type in
      mfunc_term, graph
   | Func fdata as func ->
-     let fold (terms, gg1) param =
-       let (t, gg2) = createGraph gg1 param in
-       (t::terms, gg2) in
-     let terms, gg = List.fold_left fold ([], g) fdata.params in
+     let terms, gg = foldGraphr g fdata.params in
      let terms = List.map (fun (x:Graph.term) -> Graph.Term x.name) @@ List.rev terms in
      let fterm, gg = Graph.addTerm gg ("fn." ^ fdata.name) func in
      let bodyTerm, gg = createGraph gg fdata.body in
@@ -134,10 +128,7 @@ let rec createGraph g node =
      term, gg
   | Call {callee=callee;args=args} as call->
      let calleeterm, gg = createGraph g callee in
-     let fold (terms, g) a =
-       let (t, g) = createGraph g a in
-       (t::terms, g) in
-     let argterms, gg = List.fold_left fold ([], gg) @@ List.rev args in
+     let argterms, gg = foldGraphr gg @@ List.rev args in
      let term, gg = Graph.addTerm gg ("call." ^ calleeterm.name) call in
      let gg =
        (* Call terms get generated as Call(callee, args, instantiation_term,overload_term) *)
