@@ -1,0 +1,18 @@
+func printf: Void (fmt:String, ...)
+
+# Regular overloading on parameter type
+func print(s:Float64):
+  printf("Float64: %g\n", s)
+
+print 2.1
+
+func print(s:Int64):
+  printf("Int64: %ld\n", s)
+# func print(s:Int32):
+#   printf("Int32: %d\n", s)
+
+# func i32_l: Int32(v:Int64)
+
+# print 3
+# # print (i32_l 4)
+# print 6.6

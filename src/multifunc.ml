@@ -10,14 +10,9 @@ module NodeSet = Set.Make(
 let rec multifunc deleted scope = function
   | Func func as f -> (
      match StringMap.find_opt func.name !scope with
-     | None -> scope := StringMap.add func.name f !scope; [f]
-     | Some((Func gunc) as g) ->
-        let mf = Multifunc (func.name, [g; f]) in
-        scope := StringMap.remove func.name !scope;
-        scope := StringMap.add func.name mf !scope;
-        deleted := NodeSet.add g !deleted;
-        deleted := NodeSet.add f !deleted;
-        [mf]
+     | None ->
+        let mf = Multifunc (func.name, [f]) in
+        scope := StringMap.add func.name mf !scope; [mf]
      | Some(Multifunc (name, funcs)) ->
         let mf = Multifunc (name, (f :: funcs)) in
         scope := StringMap.remove func.name !scope;

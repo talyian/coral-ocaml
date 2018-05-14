@@ -7,7 +7,7 @@ let () =
   | [| _; filename |] ->   run @@ parse_file filename;
   | _ ->
      (* Tests.run Tests.main_test; *)
-     run @@ parse_file "test_cases/libs/pcre.coral";
+     run @@ parse_file "test_cases/wip.coral";
      exit 0;
   (* run @@ parse_file "test_cases/libs/pcre.coral";
    * exit 0; *)

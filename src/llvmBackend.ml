@@ -60,9 +60,11 @@ let rec run1 llvalues = function
      let rec looper llvalues = (function
        | [] -> lvModule
        | Func func :: xs ->
+          (* Printf.printf "func: %s\n" func.name; *)
           let llvalues = generate_function lvContext lvModule llvalues (Func func) in
           looper llvalues xs
        | Multifunc (name, func_list) :: xs ->
+          (* Printf.printf "mf: %s\n" name; *)
           let llvalues = List.fold_left
             (fun lv f -> generate_function lvContext lvModule lv f)
             llvalues
@@ -261,19 +263,19 @@ and run_func context =
       | Some(Let (var, value) as letnode) ->
          (match AstMap.find_opt letnode context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
-          | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
+          | None -> failwith ("llvmBackend: (let) failed to find var " ^ v_info.name))
       | Some(Def n as defnode) ->
          (match AstMap.find_opt defnode context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
-          | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
+          | None -> failwith ("llvmBackend: (def) failed to find var " ^ v_info.name))
       | Some(Func f) ->
          (match AstMap.find_opt (Func f) context.llvalues with
-         | None -> failwith ("llvmBackend: failed to find var " ^ f.name)
+         | None -> failwith ("llvmBackend: (func) failed to find var " ^ f.name)
          | Some (var) -> var)
       | Some(v) ->
          (match AstMap.find_opt v context.llvalues with
           | Some(value) -> Llvm.build_load value v_info.name context.builder
-          | None -> failwith ("llvmBackend: failed to find var " ^ v_info.name))
+          | None -> failwith ("llvmBackend: (unknown type) failed to find var " ^ v_info.name))
       | None ->
          let c = context.context in
          let f = (Llvm.declare_function

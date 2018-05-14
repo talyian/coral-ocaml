@@ -10,24 +10,32 @@ let parse_test file ctxt =
 
 (* Forks and asserts that the child process writes a known string to stdout *)
 let output_test expected_output file ctxt =
+  (* this is required since any previous code may have unflushed output
+     that will get written after we dup2 onto the output pipe *)
+  flush stdout;
   let input, output = Unix.pipe() in
-  match Unix.fork () with
-  | 0 -> Unix.dup2 output Unix.stdout;
-         CoralModule.run @@ CoralModule.parse_file file;
-         exit 0;
-  | pid ->
+  let run_child () =
+     Unix.close input;
+     Unix.dup2 output Unix.stdout;
+     CoralModule.run @@ CoralModule.parse_file file;
+     Unix.close output;
+     exit 0 in
+  let run_parent child =
+     Unix.close output;
      let child_output =
        let rec final_output () =
-         match Unix.waitpid [ ] pid with
+         match Unix.waitpid [ ] child with
          | (pid, Unix.WEXITED n) -> n
          | _ -> final_output () in
-       let len = 1024 in
+       let len = 102400 in
        let buf = Bytes.create len in
        let read = Unix.read input buf 0 len in
        Unix.close input;
-       Unix.close output;
        Bytes.sub_string buf 0 read in
-     OUnit2.assert_equal ~printer:(fun i -> i) expected_output child_output
+     OUnit2.assert_equal ~printer:(fun i -> i) expected_output child_output in
+  match Unix.fork () with
+  | 0 -> run_child()
+  | pid -> run_parent pid
 
 let main_test = "Tests" >::: [
   "hello" >::

@@ -94,6 +94,11 @@ module GraphF =
        | Some(x) -> x
        | _ -> term_by_name next x
 
+  let rec getTermsByValue graph node =
+    graph.terms
+    |> StringMap.filter (fun name {value=n} -> Node.cmp n node = 0 && n <> Node.empty)
+    |> StringMap.bindings
+
   let rec findTermByValue graph node =
     match graph.terms
           |> StringMap.bindings

@@ -45,7 +45,16 @@ and createGraph g node =
          let gg = Graph.constrain gg blockterm (Graph.Term (List.hd terms).name) in
          blockterm, gg)
   | Multifunc (name, fdata_list) as mfunc ->
-     let terms, graph = foldGraphr g fdata_list in
+     let fold_option (terms, gg) = function
+       | Func data as f ->
+          let t, gg =
+            match Graph.getTermsByValue gg f with
+            | [] -> createGraph gg f
+            | [name, t] -> t, gg
+            | _ -> failwith "multiple terms found for function" in
+          t :: terms, gg
+       | _ -> failwith "expected function" in
+     let terms, graph = List.fold_left fold_option ([], g) fdata_list in
      let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
      let graph =
        let terms = List.rev terms in
@@ -220,11 +229,12 @@ let applySolution gg m =
       | If _ -> ()
       | Tuple _ -> () (* TODO: we need to populate these *)
       | Call ({callee=Var ({target=Some(Multifunc (mf_name, mf_funcs))} as cinfo)} as call) ->
-         (match cons with
-          | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
-             let idx = int_of_string index_str in
-             cinfo.target <- Some(List.nth mf_funcs idx)
-          | _ -> ());
+         let idx =
+           match cons with
+           | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
+             int_of_string index_str
+           | _ -> 0 in
+         cinfo.target <- Some(List.nth mf_funcs idx);
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n"
              (Ansicolor.as_color (Bold YELLOW) term.name)
