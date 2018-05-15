@@ -22,5 +22,5 @@ WORKDIR /work
 ADD src /work/src
 ADD test_cases /work/test_cases
 ADD Makefile /work/Makefile
-RUN eval `opam config env` && make
+RUN eval `opam config env` && make main.native
 CMD ["bash", "-i"]
