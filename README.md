@@ -1,6 +1,6 @@
 # Coral-Ocaml
 
-![Build Status](https://travis-ci.org/talyian/coral-ocaml.svg?branch=master)
+[![Build Status](https://travis-ci.org/talyian/coral-ocaml.svg?branch=master)](https://travis-ci.org/talyian/coral-ocaml)
 
 A Coral compiler. 
 
