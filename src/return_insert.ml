@@ -4,8 +4,10 @@ open Ast
 
 let rec find_function = function
   | Module m -> Module {m with lines=List.map find_function m.lines}
-  | Multifunc (name, funcs) ->
-     Multifunc (name, List.map rewrite_function funcs)
+  | Multifunc data as m ->
+     data.func := find_function !(data.func);
+     ignore (match data.next with | Some(next) -> find_function !next | None -> m);
+     m
   | Func _ as f -> rewrite_function f
   | n -> n
 

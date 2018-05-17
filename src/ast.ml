@@ -33,6 +33,12 @@ type 'a funcInfo = {
   body: 'a
 }
 
+type 'a multifuncInfo = {
+  name: string;
+  mutable func: 'a ref;
+  mutable next: 'a ref option;
+}
+
 type 'a moduleInfo = {
   mutable name: string;
   lines: 'a list;
@@ -66,7 +72,7 @@ let make_module lines = {name="module"; lines=lines}
 type node =
   | Module of node moduleInfo
   | Func of node funcInfo
-  | Multifunc of string * node list
+  | Multifunc of node multifuncInfo
   | Comment of (string)
   | Binop of node callInfo
   | If of (node * node * node)
@@ -126,8 +132,11 @@ let rec pprint1 fmt indent (is_inline:bool) node =
         if not is_inline then show_indent indent;
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
-  | Multifunc (name, funcs) ->
-     List.iter (show1 indent is_inline) funcs
+  | Multifunc {name=name;func={contents=func};next=next} ->
+     show1 indent is_inline func;
+     (match next with
+      | Some({contents=n}) -> show1 indent is_inline n
+      | None -> ())
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
       | Type "" -> Format.fprintf fmt "func %s(" name

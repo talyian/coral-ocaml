@@ -8,8 +8,11 @@ func print(s:Float64):
   printf("Float64: %g\n", s)
 func print(s:Int64):
   printf("Int64: %ld\n", s)
+func print(s:String):
+  printf("String: %s\n", s)
+
 print 3
-print 4
+print "4"
 print 6.6
 
 # Dependent return types on overloads
@@ -20,4 +23,4 @@ func process(s:Int64):
 
 printf("Process: %g -> %s\n", 2.3, process 2.3)
 printf("Process: %d -> %g\n", 2, process 2)
-printf("Process: %d -> %s\n", 2, process(process 2))
+printf("Process: %d --> %s\n", 2, process(process 2))

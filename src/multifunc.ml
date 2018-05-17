@@ -11,17 +11,16 @@ let rec multifunc deleted scope = function
   | Func func as f -> (
      match StringMap.find_opt func.name !scope with
      | None ->
-        let mf = Multifunc (func.name, [f]) in
+        let mf = Multifunc {name=func.name; func=ref f; next=None} in
         scope := StringMap.add func.name mf !scope; [mf]
-     | Some(Multifunc (name, funcs)) ->
-        let mf = Multifunc (name, (f :: funcs)) in
+     | Some(Multifunc data as mf) ->
+        let mf = Multifunc {data with next=Some(ref mf);func=ref f} in
         scope := StringMap.remove func.name !scope;
         scope := StringMap.add func.name mf !scope;
         [mf]
      | _ -> failwith "unexpected name found")
 
-  | Multifunc (name, funcs) as mf ->
-     [mf]
+  | Multifunc _ as mf -> [mf]
   | Module modinfo ->
      let nodes = modinfo.lines
                  |> List.map (multifunc deleted scope)

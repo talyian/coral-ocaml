@@ -26,9 +26,10 @@ let rec run1 scope = function
      let scope = List.fold_left (fun s p -> fst(run1 s p)) scope params in
      let scope, body = run1 scope body in
      scope, f
-  | Multifunc (name, funcs) as mf ->
+  | Multifunc {name=name;func=func;next=next} as mf ->
      let mf_scope = addName name mf scope in
-     List.map (run1 mf_scope) funcs |> ignore;
+     ignore @@ run1 scope !func;
+     (* List.map (fun f -> run1 mf_scope !f) funcs |> ignore; *)
      mf_scope, mf
   | If(cond, ifbody, elsebody) as x ->
      ignore (run1 scope cond);
@@ -46,7 +47,9 @@ let rec run1 scope = function
   | Var v as x ->
      let _ = match findName v.name scope with
        | Some(e) -> v.target <- Some(e)
-       | None -> (* Printf.printf "missing reference: %s\n" v.name; *) ()
+       | None ->
+          (* Printf.printf "missing reference: %s\n" v.name; *)
+          ()
      in scope, x
   | Let (v, expr) as x -> addName v.name x (fst (run1 scope expr)), x
   | Set (v, expr) as x -> fst (run1 scope expr), x

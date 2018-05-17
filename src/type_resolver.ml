@@ -44,18 +44,21 @@ and createGraph g node =
         let terms, gg = foldGraphr gg list in
          let gg = Graph.constrain gg blockterm (Graph.Term (List.hd terms).name) in
          blockterm, gg)
-  | Multifunc (name, fdata_list) as mfunc ->
-     let fold_option (terms, gg) = function
-       | Func data as f ->
-          let t, gg =
-            match Graph.getTermsByValue gg f with
-            | [] -> createGraph gg f
-            | [name, t] -> t, gg
-            | _ -> failwith "multiple terms found for function" in
-          t :: terms, gg
-       | _ -> failwith "expected function" in
-     let terms, graph = List.fold_left fold_option ([], g) fdata_list in
-     let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ name) mfunc in
+  | Multifunc data as mfunc ->
+     let rec get_terms gg data =
+       let tail, gg2 =
+         match data.next with
+         | Some({contents=Multifunc next}) -> get_terms gg next
+         | _ -> [], gg in
+       let term, gg3 =
+         match Graph.getTermsByValue gg !(data.func) with
+         | [] -> createGraph gg2 !(data.func)
+         | [name, term] -> term, gg2
+         | _ -> failwith("multiple terms for " ^ data.name) in
+       term::tail, gg3
+     in
+     let terms, graph = get_terms g data in
+     let mfunc_term, graph = Graph.addTerm graph ("mfn." ^ data.name) mfunc in
      let graph =
        let terms = List.rev terms in
        let options = List.map (fun (t:Graph.term) -> Graph.Term t.name) terms in
@@ -228,18 +231,32 @@ let applySolution gg m =
       | Binop _ -> ()
       | If _ -> ()
       | Tuple _ -> () (* TODO: we need to populate these *)
-      | Call ({callee=Var ({target=Some(Multifunc (mf_name, mf_funcs))} as cinfo)} as call) ->
-         let idx =
-           match cons with
-           | Graph.Type ("Overload", [Graph.Type (index_str, [])]) ->
-             int_of_string index_str
+      | Call ({callee=Var ({target=Some(Multifunc ({name=mf_name} as mf))} as cinfo)} as call) ->
+         let rec getLength = function
+           | Some({contents=Multifunc mf}) -> 1 + getLength mf.next
            | _ -> 0 in
-         cinfo.target <- Some(List.nth mf_funcs idx);
+         let len = getLength (Some(ref (Multifunc mf))) in
+         let rec rgetNth mf = function
+           | 0 -> !(mf.func)
+           | n -> (match mf.next with
+                   | Some({contents=Multifunc nextmf}) -> rgetNth nextmf (n - 1)
+                   | _ -> failwith "oops") in
+         let getNth mf n = rgetNth mf (len - 1 - n) in
+         (match cons with
+         | Graph.Type("Overload", [Graph.Type (index_str, [])]) ->
+            let idx = int_of_string index_str in
+            cinfo.target <- Some(getNth mf idx);
+         | _ -> ());
+
+         (match mf.next with
+          | None -> cinfo.target <- Some(getNth mf 0)
+          | _ -> ());
+
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n"
              (Ansicolor.as_color (Bold YELLOW) term.name)
              (Ast.nodeName term.value) (Graph.cons_to_string cons);
-      | Call call ->
+      | Call ({callee=(Var var as callee);args=args} as call) ->
          (match cons with
           | Graph.Type ("%call", params) as cons ->
              call.coraltype <- Some(constraint_to_type cons);
@@ -248,7 +265,9 @@ let applySolution gg m =
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n"
              (Ansicolor.as_color (Bold GREEN) term.name)
-             (Ast.nodeName term.value) (Graph.cons_to_string cons))
+             (* (Ast.nodeName callee) *)
+             (match var.target with | Some n -> Ast.nodeName n | _ -> "none")
+             (Graph.cons_to_string cons))
       | _ ->
          if Graph.config.debug then
            Printf.printf "%s (%s) --> %s\n" (Ansicolor.as_color (Bold CYAN) term.name)

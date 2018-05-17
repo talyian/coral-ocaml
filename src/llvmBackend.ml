@@ -63,13 +63,15 @@ let rec run1 llvalues = function
           (* Printf.printf "func: %s\n" func.name; *)
           let llvalues = generate_function lvContext lvModule llvalues (Func func) in
           looper llvalues xs
-       | Multifunc (name, func_list) :: xs ->
+       | Multifunc {name=name;func={contents=contents}} :: xs ->
           (* Printf.printf "mf: %s\n" name; *)
-          let llvalues = List.fold_left
-            (fun lv f -> generate_function lvContext lvModule lv f)
-            llvalues
-            func_list in
+          let llvalues = generate_function lvContext lvModule llvalues contents in
           looper llvalues xs
+          (* let llvalues = List.fold_left
+           *   (fun lv f -> generate_function lvContext lvModule lv !f)
+           *   llvalues
+           *   func_list in
+           * looper llvalues xs *)
        | TupleDef info as tuple :: rest ->
           let llfields =
             info.fields
