@@ -1,0 +1,14 @@
+(ocamllex lexer)
+
+(menhir
+ (modules grammar))
+
+(executable
+ (name main)
+ (foreign_stubs
+  (language c)
+  (names foobar))
+ (libraries
+  str
+  ctypes ctypes.foreign
+  llvm llvm.analysis llvm.passmgr_builder llvm.executionengine))

@@ -15,7 +15,7 @@ let rec type_to_constraint = function
   | Ast.Type s -> Graph.Type (s, [])
   | Ast.Parameterized ("Tuple", []) -> Graph.Type ("Void", [])
   | Ast.Parameterized (s, p) -> Graph.Type (s, List.map type_to_constraint p)
-  | Ast.Dotted items -> failwith "unhandled dotted type"
+  | Ast.Dotted _items -> failwith "unhandled dotted type"
 
 let rec constraint_to_type = function
   | Graph.Type(s, []) -> Ast.Type s
@@ -31,7 +31,7 @@ and createGraph g node =
   match node with
   | Empty -> Graph.addTerm g "empty" Empty
   | Module modinfo as m ->
-     let terms, gg = foldGraphr g modinfo.lines in
+     let _terms, gg = foldGraphr g modinfo.lines in
      Graph.addTerm gg "module" m
   | Block list as block ->
      let blockterm, gg = Graph.addTerm g "block" block in
@@ -53,7 +53,7 @@ and createGraph g node =
        let term, gg3 =
          match Graph.getTermsByValue gg !(data.func) with
          | [] -> createGraph gg2 !(data.func)
-         | [name, term] -> term, gg2
+         | [_name, term] -> term, gg2
          | _ -> failwith("multiple terms for " ^ data.name) in
        term::tail, gg3
      in
@@ -74,11 +74,11 @@ and createGraph g node =
      let gg =
        match fdata.ret_type with
        | Ast.Type "" -> gg
-       | n -> Graph.constrain gg retTerm (type_to_constraint fdata.ret_type) in
+       | _ -> Graph.constrain gg retTerm (type_to_constraint fdata.ret_type) in
      let gg =
        match fdata.body with
        | Empty -> gg
-       | body -> Graph.constrain gg retTerm (Graph.Term bodyTerm.name) in
+       | _ -> Graph.constrain gg retTerm (Graph.Term bodyTerm.name) in
      let gg = Graph.constrain gg fterm (Graph.Type ("Func", terms @ [Graph.Term retTerm.name])) in
      fterm, gg
   | Def info as def ->
@@ -110,7 +110,7 @@ and createGraph g node =
      let term, gg = Graph.addTerm g ("f" ^ i) inode in
      let gg = Graph.constrain gg term (Graph.Type ("Float64", [])) in
      term, gg
-  | Binop {name=op;args=[lhs;rhs]} as binop ->
+  | Binop {name=op;args=[lhs;rhs];_} as binop ->
      let term, gg = Graph.addTerm g ("op." ^ op) binop in
      let lterm, gg = createGraph gg lhs in
      let rterm, gg = createGraph gg rhs in
@@ -138,7 +138,7 @@ and createGraph g node =
      let term, gg = Graph.addTerm g "x" tt in
      let gg = Graph.constrain gg term (Graph.Type ("Void", [])) in
      term, gg
-  | Call {callee=callee;args=args} as call->
+  | Call {callee=callee;args=args;_} as call->
      let calleeterm, gg = createGraph g callee in
      let argterms, gg = foldGraphr gg @@ List.rev args in
      let term, gg = Graph.addTerm gg ("call." ^ calleeterm.name) call in
@@ -199,7 +199,7 @@ and createGraph g node =
      Printf.printf "createGraph: %s\n" (nodeName node);
      Graph.addTerm g (nodeName x) x
 
-let applySolution gg m =
+let applySolution gg _ =
   Graph.TermMap.iter (fun term cons ->
       match term.value with
       | Func info ->
@@ -212,10 +212,10 @@ let applySolution gg m =
             match constraint_to_type cons with
             | Ast.Parameterized ("Func", params) -> info.ret_type <- List.hd @@ List.rev params
             | _ -> show ()
-          with | e -> show ())
+          with | _ -> show ())
       | Def p -> p.defType <- Some(constraint_to_type cons);
       | Return p -> p.coraltype <- Some(constraint_to_type cons);
-      | Let (var, expr) -> var.varType <- Some(constraint_to_type cons)
+      | Let (var, _expr) -> var.varType <- Some(constraint_to_type cons)
       | Member mem ->
          (match cons with
          | Graph.Type("Index", [Graph.Type(n, [])]) ->
@@ -224,14 +224,14 @@ let applySolution gg m =
       (* ignore known type nodes *)
       | TupleDef _
       | Block _
-      | FloatLiteral _ | IntLiteral _ | Empty _ -> ()
+      | FloatLiteral _ | IntLiteral _ | Empty -> ()
       | StringLiteral _ -> ()
         (* TODO: if we tag binops with type
          we can resolve overloaded operators *)
       | Binop _ -> ()
       | If _ -> ()
       | Tuple _ -> () (* TODO: we need to populate these *)
-      | Call ({callee=Var ({target=Some(Multifunc ({name=mf_name} as mf))} as cinfo)} as call) ->
+      | Call ({callee=Var ({target=Some(Multifunc ({name=_mf_name;_} as mf));_} as cinfo);_} as _call) ->
          let rec getLength = function
            | Some({contents=Multifunc mf}) -> 1 + getLength mf.next
            | _ -> 0 in
@@ -256,9 +256,9 @@ let applySolution gg m =
            Printf.printf "%s (%s) --> %s\n"
              (Ansicolor.as_color (Bold YELLOW) term.name)
              (Ast.nodeName term.value) (Graph.cons_to_string cons);
-      | Call ({callee=(Var var as callee);args=args} as call) ->
+      | Call ({callee=(Var var as _callee);args=_args;_} as call) ->
          (match cons with
-          | Graph.Type ("%call", params) as cons ->
+          | Graph.Type ("%call", _params) as cons ->
              call.coraltype <- Some(constraint_to_type cons);
              ()
           | _ ->
@@ -303,7 +303,7 @@ let run m =
       Graph.Type("Func", [pt; pu]) in
     Graph.constrain gg tt cons in
   (* Ast.show m; *)
-  let term, graph = createGraph gg m in
+  let _term, graph = createGraph gg m in
   if Graph.config.debug then Graph.show graph;
   let solution = Graph.solve graph in
   if Graph.config.debug then Graph.show solution;

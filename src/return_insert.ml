@@ -27,7 +27,7 @@ and rewrite retType = function
   | Block lines ->
      let rec loop x asdf =
        match List.rev asdf with
-       | Empty _ as e:: xs -> loop (e::x) xs
+       | Empty as e:: xs -> loop (e::x) xs
        | Comment _ as e :: xs -> loop (e::x) xs
        | e :: xs -> rewrite retType e :: xs
        | [] -> [Return {node=Empty;coraltype=None}]

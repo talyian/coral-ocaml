@@ -42,7 +42,7 @@ module GraphF =
     | Type (n, []) -> n
     | Type (n, p) ->
        n ^ "[" ^ (String.concat ", " (List.map cons_to_string p)) ^ "]"
-    | Call (a, p, overload) ->
+    | Call (a, p, _overload) ->
        cons_to_string a ^ "(" ^ (String.concat ", " (List.map cons_to_string p)) ^ ")"
     | OneOf p -> "(" ^ (String.concat "|" (List.map cons_to_string p)) ^ ")"
     | AllOf p -> "(" ^ (String.concat " & " (List.map cons_to_string p)) ^ ")"
@@ -94,24 +94,25 @@ module GraphF =
        | Some(x) -> x
        | _ -> term_by_name next x
 
-  let rec getTermsByValue graph node =
+  let getTermsByValue graph node =
     graph.terms
-    |> StringMap.filter (fun name {value=n} -> Node.cmp n node = 0 && n <> Node.empty)
+    |> StringMap.filter (fun _name {value=n; _} -> Node.cmp n node = 0 && n <> Node.empty)
     |> StringMap.bindings
 
-  let rec findTermByValue graph node =
+  let findTermByValue graph node =
     match graph.terms
           |> StringMap.bindings
           |> List.filter (function
-             | name, {value=n} when Node.cmp n node = 0 && n <> Node.empty -> true
+             | _name, {value=n; _} when Node.cmp n node = 0 && n <> Node.empty -> true
              | _ -> false) with
-    | [a, b] -> b
+    | [_, b] -> b
     | [] ->
        showColor (3, 2, 2) graph;
        failwith (Printf.sprintf "not found: (%s)" (Node.show node))
     | _ ->
        showColor (3, 2, 2) graph;
        failwith (Printf.sprintf "multiple bindings: (%s)" (Node.show node))
+
   let addTerm graph name node =
     let rec add_loop i =
       let newname = match i with
@@ -211,7 +212,7 @@ module GraphF =
 
     let fold_replace key target (count, actives, constraints) =
       let c, new_cons = doReplace term cons target in
-      let new_actives = match c with | 0 -> actives | n -> TermSet.add key actives in
+      let new_actives = match c with | 0 -> actives | _ -> TermSet.add key actives in
       (count + c, new_actives, TermMap.add key new_cons constraints) in
     let cc, actives, constraints =
       TermMap.fold fold_replace graph.constraints (0, TermSet.empty, TermMap.empty) in
@@ -269,7 +270,7 @@ module GraphF =
   and unify_zip graph tt ap bp =
     let zip = List.map2 (fun a b -> a, b) ap bp in
     let initial = Success (graph, []), graph, tt in
-    let result, graph, _ = List.fold_left unify_folder initial zip in
+    let result, _graph, _ = List.fold_left unify_folder initial zip in
     result
 
   (* let rec unify_items graph tt items =
@@ -280,7 +281,7 @@ module GraphF =
      that simplifies the constraint *)
   and nullify graph tt = function
     (* | Member(Type (typename, _), member, Term out_index) -> *)
-    | Call(Type("Func", params), args, o) as call -> unify graph tt (Term tt.name) call
+    | Call(Type("Func", _params), _args, _o) as call -> unify graph tt (Term tt.name) call
     | OneOf [] | AllOf [] -> Success (graph, [])
     | OneOf [a] -> Success (graph, [tt, a])
     | AllOf [a] -> Success (graph, [tt, a])
@@ -303,8 +304,8 @@ module GraphF =
     | (Term x, (Type _ as y)) | (Type _ as y, Term x) ->
        Success (graph, [term_by_name [graph] x, y])
 
-    | (Type _ as cons1, Call (Type("Func", params), args, overload))
-    | (Term _ as cons1, Call (Type("Func", params), args, overload)) ->
+    | (Type _ as cons1, Call (Type("Func", params), args, _overload))
+    | (Term _ as cons1, Call (Type("Func", params), args, _overload)) ->
        let arg1 = args @ [cons1] in
        let rec instantiate_f (gg, map, terms) = function
          | Free n ->
@@ -319,8 +320,12 @@ module GraphF =
             gg, map, Type(name, pterms) :: terms
          | other -> gg, map, other :: terms
        in
-       let graph, _, [Type(name, params)] =
-         instantiate_f (graph, IntMap.empty, []) (Type("Func", params)) in
+       let graph, _name, params =
+         let g, _, t = instantiate_f (graph, IntMap.empty, []) (Type("Func", params)) in
+         match t with
+         | [Type(n, p)] -> g, n, p
+         | _other -> failwith "mismatch in instantiate_f return" in
+
        let params = List.rev params in
        (* handle varargs *)
        let arg1, params =
@@ -342,7 +347,7 @@ module GraphF =
        let optf op = unify graph tt cons1 (Call(op, args, overload)) in
        let unification = List.map optf options in
        let uni_indexed = List.mapi (fun i x -> i, x) unification in
-       let matches = function | n, Fail _ -> false | _ -> true in
+       let matches = function | _, Fail _ -> false | _ -> true in
        (match List.partition matches uni_indexed with
         | [], _ -> Fail (Printf.sprintf "could not type %s, %s"
                           (cons_to_string @@ cons1)
@@ -400,15 +405,15 @@ module GraphF =
          let graph = List.fold_left (fun gg (t, c) -> constrain gg t c) graph items in
          let newterms = List.map fst items |> TermSet.of_list in
          1, {graph with active_terms=TermSet.union graph.active_terms newterms}
-      | Defer (items) ->
+      | Defer (_items) ->
          (* let graph = List.fold_left (fun gg (t, c) -> constrain gg t c) graph items in *)
          0, graph in
 
     match cons with
-    | Type (name, params) as t -> activate_replace_term term t graph
-    | Term n as t -> activate_replace_term term t graph
+    | Type (_name, _params) as t -> activate_replace_term term t graph
+    | Term _ as t -> activate_replace_term term t graph
     | AllOf(n :: []) | OneOf (n :: []) -> step graph term n
-    | OneOf n as t -> activate_replace_term term (simplify term t) graph
+    | OneOf _ as t -> activate_replace_term term (simplify term t) graph
     | AllOf items ->
        (* to simplify a N-ary &&-expression, we can either find a simple constraint
           like term/type and unify it against the remaining to get a (N-1)-ary &&-expr
@@ -423,9 +428,9 @@ module GraphF =
            let cons_list = (Term term.name :: rest) in
            let unifold graph cons =
              match unify graph term (Type (tt, tp)) cons with
-             | Fail s -> graph
+             | Fail _ -> graph
              | Success (gg, items) -> List.fold_left (fun gg (t, c) -> constrain gg  t c) gg items
-             | Defer items -> graph
+             | Defer _items -> graph
            in
            let graph = List.fold_left unifold graph cons_list in
            c, graph
@@ -435,7 +440,7 @@ module GraphF =
            let graph = constrain graph term nterm in
            (* when a == b && other things, b &= other things and get rid of a *)
            (* replace all references to term with n *)
-           let c, graph = activate_replace_term term nterm graph in
+           let _c, graph = activate_replace_term term nterm graph in
            let n_term = term_by_name [graph] n in
            let folder graph cons = constrain graph n_term cons in
            let graph = List.fold_left folder (graph) rest in
@@ -445,7 +450,7 @@ module GraphF =
              match unify graph term (Term term.name) cons with
              | Fail s -> failwith s
              | Success (gg, items) -> List.fold_left (fun gg (t, c) -> constrain gg t c) gg items
-             | Defer items -> graph in
+             | Defer _items -> graph in
            let graph = List.fold_left unifold graph items in
            1, graph
        )
@@ -478,7 +483,7 @@ module GraphF =
          if config.debug then Printf.printf "ct: [%d]\n" other;
          if n > 0 then solve_step (n - 1) b else -1, b in
     (* 10 steps is an arbitrary limit *)
-    let i, g1 = solve_step 10 graph
+    let _i, g1 = solve_step 10 graph
     in finalize g1
 
 end

@@ -30,6 +30,6 @@ let rec multifunc deleted scope = function
   | n -> [n]
 
 let run = function
-  | Module nodes as m ->
+  | Module _ as m ->
      List.hd (multifunc (ref NodeSet.empty) (ref StringMap.empty) m)
   | n -> n

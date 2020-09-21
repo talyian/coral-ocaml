@@ -18,15 +18,15 @@ let addName name value scope = {scope with names=StringMap.add name value scope.
 
 (* point all the Var nodes to a preceding expression *)
 let rec run1 scope = function
-  | Module {lines=lines} as m ->
+  | Module {lines=lines; _} as m ->
      let scope = List.fold_left (fun s p -> fst (run1 s p)) scope lines in
      scope, m
-  | Func {name=name; ret_type=ret_type; params=params; body=body} as f ->
+  | Func {name=name; ret_type=_ret_type; params=params; body=body} as f ->
      let scope = addName name f scope in
      let scope = List.fold_left (fun s p -> fst(run1 s p)) scope params in
-     let scope, body = run1 scope body in
+     let scope, _body = run1 scope body in
      scope, f
-  | Multifunc {name=name;func=func;next=next} as mf ->
+  | Multifunc {name=name;func=func;next=_next} as mf ->
      let mf_scope = addName name mf scope in
      ignore @@ run1 scope !func;
      (* List.map (fun f -> run1 mf_scope !f) funcs |> ignore; *)
@@ -36,14 +36,14 @@ let rec run1 scope = function
      ignore (run1 scope ifbody);
      ignore (run1 scope elsebody);
      scope, x
-  | Binop {name=op;args=[lhs;rhs]} as x ->
+  | Binop {name=_op;args=[lhs;rhs]; _} as x ->
      ignore (run1 scope lhs);
      ignore (run1 scope rhs);
      scope, x
-  | IntLiteral i as x -> scope, x
-  | FloatLiteral i as x -> scope, x
-  | StringLiteral s as x -> scope, x
-  | Comment c as x -> scope, x
+  | IntLiteral _ as x -> scope, x
+  | FloatLiteral _ as x -> scope, x
+  | StringLiteral _ as x -> scope, x
+  | Comment _ as x -> scope, x
   | Var v as x ->
      let _ = match findName v.name scope with
        | Some(e) -> v.target <- Some(e)
@@ -52,9 +52,9 @@ let rec run1 scope = function
           ()
      in scope, x
   | Let (v, expr) as x -> addName v.name x (fst (run1 scope expr)), x
-  | Set (v, expr) as x -> fst (run1 scope expr), x
+  | Set (_v, expr) as x -> fst (run1 scope expr), x
   | Def v as x -> addName v.name x scope, x
-  | Call {callee=callee;args=args} as x ->
+  | Call {callee=callee; args=args; _} as x ->
      ignore (run1 scope callee);
      let rec loop = function | [] -> () | x :: xs -> ignore (run1 scope x); loop xs
      in loop args;
@@ -70,7 +70,7 @@ let rec run1 scope = function
      let scope = addName def.name tuple scope in scope, tuple
   | Member mem as member ->
      let scope, _ = run1 scope mem.base in scope, member
-  | Return {node=v} as x-> ignore (run1 scope v); scope, x
+  | Return {node=v; _} as x-> ignore (run1 scope v); scope, x
   | Empty as x -> scope, x
   | _ -> failwith "unhandled"
 let run x = snd (run1 {parent=None; names=StringMap.empty} x)

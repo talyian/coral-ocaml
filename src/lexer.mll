@@ -49,10 +49,10 @@ rule coral_token ctx = parse
         pos_lnum = lexbuf.lex_curr_p.pos_lnum + 1
      };
      let indents = match ctx.nestlevel, ctx.indents with
-       | 0, n :: xs when n < indent_len ->
+       | 0, n :: _ when n < indent_len ->
            ctx.indents <- indent_len :: ctx.indents;
            [Grammar.INDENT]
-       | 0, n :: xs when n > indent_len ->
+       | 0, n :: _ when n > indent_len ->
            let rec pop dedents =
               match ctx.indents with
               | n :: xs when n > indent_len ->
@@ -77,10 +77,10 @@ and comment ctx = parse
         pos_lnum = lexbuf.lex_curr_p.pos_lnum + 1
      };
      (Grammar.NEWLINE(String.length tok) :: (match ctx.indents with
-       | n :: xs when n < indent_len ->
+       | n :: _ when n < indent_len ->
            ctx.indents <- indent_len :: ctx.indents;
            [Grammar.INDENT]
-       | n :: xs when n > indent_len ->
+       | n :: _ when n > indent_len ->
            let rec pop dedents =
               match ctx.indents with
               | n :: xs when n > indent_len ->

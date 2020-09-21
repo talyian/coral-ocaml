@@ -5,7 +5,7 @@ type moduleExprAction = Noop | AddToMain | IsMain
 
 let moduleExprAction = function
   | Module _ -> Noop
-  | Func {name=name; ret_type=rettype} when name == ".init" -> IsMain
+  | Func {name=name; ret_type=_rettype; _} when name == ".init" -> IsMain
   | Func _ -> Noop
   | Multifunc _ -> Noop
   | TupleDef _ -> Noop

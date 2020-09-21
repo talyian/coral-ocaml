@@ -8,7 +8,7 @@ let rec type_to_string = function
   | Free -> "free"
   | Type s -> s
   | Parameterized (name, params) -> name ^ "[" ^ String.concat ", " (List.map type_to_string params) ^ "]"
-  | Dotted (n) -> "dotted"
+  | Dotted (_) -> "dotted"
 
 type 'a varInfo = {
   name:string;
@@ -100,7 +100,7 @@ let newFunc (name, ret, params, body) = {
 
 let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc" | Member _ -> "Member" | TupleDef _ -> "TupleDef"
 
-let show_indent n = for i = 1 to n do Printf.printf "  " done
+let show_indent n = for _ = 1 to n do Printf.printf "  " done
 
 let needs_parentheses_for_call = function
   | Binop _ -> true
@@ -109,11 +109,11 @@ let needs_parentheses_for_call = function
   | _ -> false
 
 let string_escape s = s
-  |> Str.global_replace (Str.regexp "\n") "\\n"
-  |> Str.global_replace (Str.regexp "\t") "\\t"
+  |> Str.global_replace (Str.regexp "\\n") "\\\\n"
+  |> Str.global_replace (Str.regexp "\\t") "\\\\t"
 
 let string_name_escape s = s
-  |> Str.global_replace (Str.regexp "\n\|\t\| ") "_"
+  |> Str.global_replace (Str.regexp "\\n\\|\\t\\| ") "_"
 
 let rec pprint1 fmt indent (is_inline:bool) node =
   let show1 = pprint1 fmt in
@@ -132,7 +132,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
         if not is_inline then show_indent indent;
         printf "else:\n";
         show1 (indent + 1) is_inline elsebody)
-  | Multifunc {name=name;func={contents=func};next=next} ->
+  | Multifunc {name=_name;func={contents=func};next=next} ->
      show1 indent is_inline func;
      (match next with
       | Some({contents=n}) -> show1 indent is_inline n
@@ -140,7 +140,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
   | Func {name=name; ret_type=ret_type; params=params; body=body} ->
      (match ret_type with
       | Type "" -> Format.fprintf fmt "func %s(" name
-      | tt -> Format.fprintf fmt "func %s: %s(" name (type_to_string ret_type));
+      | tt -> Format.fprintf fmt "func %s: %s(" name (type_to_string tt));
      let rec loop = function
        | [] -> ()
        | Def p :: xs ->
@@ -153,7 +153,7 @@ let rec pprint1 fmt indent (is_inline:bool) node =
   | _ ->
     if not is_inline then show_indent indent;
     (match node with
-    | Module {lines=lines} ->
+    | Module {lines=lines;_} ->
        List.iter (show1 indent is_inline) lines
     | Def x ->
        (match x.defType with
@@ -167,11 +167,11 @@ let rec pprint1 fmt indent (is_inline:bool) node =
     | IntLiteral n -> Format.fprintf fmt "%s" n
     | FloatLiteral n -> Format.fprintf fmt "%s" n
     | Comment c -> Format.fprintf fmt "# %s" c
-    | Binop {name=op; args=[lhs;rhs]} ->
+    | Binop {name=op; args=[lhs;rhs]; _} ->
        show1 0 true lhs;
        Format.fprintf fmt " %s " op;
        show1 0 true rhs;
-    | Call {callee=callee;args=args} ->
+    | Call {callee=callee;args=args; _} ->
        show1 0 true callee;
        (match args with
         | [n] ->

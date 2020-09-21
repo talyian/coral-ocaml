@@ -1,5 +1,4 @@
 open Lexing
-open Ast
 open Lexer
 open Printf
 
@@ -26,7 +25,7 @@ let print_tokens lexbuf =
     | IF -> printf "IF "; loop ctx
     | ELSE -> printf "ELSE "; loop ctx
     | COLON -> printf ":"; loop ctx
-    | NEWLINE(n) -> printf "NEWLINE"; loop ctx
+    | NEWLINE _ -> printf "NEWLINE"; loop ctx
     | INDENT -> printf "INDENT"; loop ctx
     | DEDENT -> printf "DEDENT"; loop ctx
     | LPAREN -> printf "LPAREN ("; loop ctx

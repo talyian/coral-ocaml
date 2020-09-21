@@ -1,8 +1,6 @@
 open Printf
 open Grammar
-open LlvmBackend
-
-open OUnit
+open! LlvmBackend
 
 let parse name lexbuf =
   let m =
