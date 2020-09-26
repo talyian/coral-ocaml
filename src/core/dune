@@ -1,0 +1,4 @@
+(library
+ (name coral_core)
+ (libraries re stdio base)
+ )

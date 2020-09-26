@@ -1,0 +1,12 @@
+(ocamllex
+ lexer)
+
+(menhir
+ (flags --external-tokens Token)
+ (modules grammar))
+
+(library
+ (name coral_frontend)
+ (libraries coral_core)
+ (preprocess (pps ppx_deriving.show ppx_inline_test))
+)

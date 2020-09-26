@@ -1,5 +1,5 @@
 %{
-open Ast
+open Coral_core.Ast
 %}
 
 %token <string> INTEGER
@@ -8,32 +8,39 @@ open Ast
 %token <string> IDENTIFIER STRING
 %token <char> OTHER
 %token <int> NEWLINE
-%token FUNC IF ELSE COMMA ELLIPSIS RETURN LET SET
+%token FUNC IF ELSE ELIF COMMA ELLIPSIS RETURN LET SET
 %token LPAREN RPAREN COLON LBRACE RBRACE LBRACKET RBRACKET
 %token INDENT DEDENT TYPE
 %token EQ DOT
+%token EOF
 
 %start main
-%token EOF
-%type <Ast.node> expr line block main
-%type <Ast.node list> lines
-%type <Ast.node list> paramlist
+%type <Coral_core.Ast.node> expr line block main
+%type <Coral_core.Ast.node list> lines
+%type <Coral_core.Ast.node list> paramlist
 %%
 
 main
-  : x=lines EOF        { Module(make_module x) }
-  | x=lines e=expr EOF { Module(make_module @@ x @ [e]) }
-
+  : newlines? x=lines EOF { Module(make_module x) }
+  | newlines? x=lines_nl EOF { Module(make_module x) }
+        
+newlines: NEWLINE+ { }
+                                                       
+lines
+                : line { [$1] }
+                | lines_nl line { $1 @ [$2] }
+lines_nl : lines newlines { $1 }
 line
   : func_declaration { $1 }
-  | LET name=IDENTIFIER EQ e=expr NEWLINE { Let({name=name;target=None;varType=None}, e) }
-  | LET name=IDENTIFIER COLON t=typedef EQ e=expr NEWLINE {
-      Let({name=name;target=None;varType=Some(t)}, e) }
-  | SET name=IDENTIFIER EQ e=expr NEWLINE { Set({name=name;target=None;varType=None}, e) }
-  | RETURN arg=expr NEWLINE { Return {node=arg;coraltype=None} }
-  | RETURN NEWLINE { Return {node=Tuple [];coraltype=None} }
-  | e=expr NEWLINE { e }
-  | e=ifexpr {e}
+  | LET name=IDENTIFIER EQ e=expr { Let({name=name;target=None;varType=None}, e) }
+  | LET name=IDENTIFIER COLON t=typedef EQ e=expr {
+      Let({name=name;target=None;varType=Some(t)}, e)
+    }
+  | SET name=IDENTIFIER EQ e=expr { Set({name=name;target=None;varType=None}, e) }
+  | RETURN arg=expr { Return {node=arg;coraltype=None} }
+  | RETURN { Return {node=Tuple [];coraltype=None} }
+  | e=expr { e }
+        |       e=ifexpr {e}
   | e=tuple_def { TupleDef e }
 
 func_name
@@ -42,29 +49,27 @@ func_name
 
 func_return : COLON ret=typedef { ret }
 func_params : LPAREN p=paramlist RPAREN { p }
-func_body   : block_or_line { $1 } | NEWLINE { Empty }
+func_body   : block_or_line { $1 }
 func_declaration
   : FUNC name=func_name ret=func_return? p=func_params body=func_body
     { let ret = match ret with | Some (v) -> v | None -> Type "" in
       Func(newFunc (name, ret, p, body)) }
 
 ifexpr
-  : IF cond=expr2 ifbody=block_or_line { If(cond, ifbody, Empty) }
-  | IF cond=expr2 ifbody=block_or_line ELSE elsebody=block_or_line { If(cond, ifbody, elsebody) }
-  | IF cond=expr2 ifbody=block_or_line ELSE elsebody=ifexpr { If(cond, ifbody, elsebody) }
-
-lines
-  : NEWLINE { [] }
-  | line { [$1] }
-  | x=lines e=line { x @ [e] }
-  | x=lines NEWLINE { x }
-
+  : IF cond=expr2 ifbody=block_or_line NEWLINE
+    elifexpr*
+    elsebody=elseexpr? { If(cond, ifbody, Option.value elsebody ~default:Empty) }
+elifexpr
+  : ELIF cond=expr2 body=block_or_line NEWLINE { (cond, body) }
+elseexpr
+  : ELSE body=block_or_line NEWLINE { body }
+                                 
 block
-  : COLON NEWLINE INDENT lines=lines DEDENT { Block(lines) }
-
+  : newlines? lines=lines DEDENT { Block(lines) }
+  | newlines? lines=lines_nl DEDENT { Block(lines) }
 block_or_line
-  : e=block { e }
-  | COLON e=expr NEWLINE { e }
+  : COLON NEWLINE INDENT e=block { e }
+  | COLON e=line { e }
 
 (* Higher Precedence than calling *)
 expr_atom
@@ -111,16 +116,14 @@ paramlist
   : e=non_empty_paramlist { e }
   | { [] }
 non_empty_paramlist
-  : NEWLINE? INDENT? p=param { [p] }
-  | x=paramlist COMMA NEWLINE? INDENT? p=param { x@[p] }
+  : p=param { [p] }
+  | x=paramlist COMMA p=param { x@[p] }
 
 typedef
   : e=IDENTIFIER { Type e }
   | ELLIPSIS { Type "..." }
   | e=IDENTIFIER LBRACKET params=typedefList RBRACKET { Parameterized(e, params) }
-typedefList
-  : typedef { [$1] }
-  | td=typedef COMMA rest=typedefList { td::rest }
+typedefList : separated_nonempty_list(COMMA, typedef) { $1 }
 
 member
 : base=expr_atom DOT member=IDENTIFIER

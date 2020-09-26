@@ -1,14 +1,25 @@
-(ocamllex lexer)
-
-(menhir
- (modules grammar))
+(library
+ (name tests)
+ (inline_tests (flags -verbose))
+ (modules tests)
+ (libraries coral_frontend)
+ (preprocess (pps ppx_inline_test))
+ )
 
 (executable
  (name main)
+ (modules main)
  (foreign_stubs
   (language c)
   (names foobar))
  (libraries
+  frontend
   str
   ctypes ctypes.foreign
-  llvm llvm.analysis llvm.passmgr_builder llvm.executionengine))
+  llvm llvm.analysis llvm.passmgr_builder llvm.executionengine)
+ (preprocess (pps ppx_inline_test)))
+
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A))))
