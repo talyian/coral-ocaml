@@ -1,0 +1,40 @@
+# Pidigits
+# modified from PHP version contributed by Oleksii Prudkyi and
+# crediting Mike Pall, Wim Couwenberg, Craig Russell
+
+let k = 1
+let n = int (sys.args[1])
+
+let u = bigint 0
+let v = bigint 0
+let w = bigint 0
+let d = bigint 1
+let n1 = bigint 4
+let n2 = bigint 3
+
+func digits():
+   set u = n1 / d
+   set v = n2 / d
+   if u = v:
+      yield u
+      set u *= -10
+      set u *= d
+      set n1 *= 10
+      set n1 += u
+      set n2 *= 10
+      set n2 += u
+   else:
+      set u = n1 * (k * 2 - 1)
+      set v = n2 + n2
+      set w = n1 * (k - 1)
+      set n1 = u + v
+      set u = n2 * (k + 2)
+      set n2 = w + u
+      set d *= k * 2 + 1
+      set k += 1
+   digits ()
+
+for (i, d) in digits.take(n).indexed():
+   stdout.write d
+   if i % 10 == 9 or i == n - 1:
+     print $"\t:{i+1}\n"

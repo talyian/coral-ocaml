@@ -1,0 +1,31 @@
+# K-Nucleotide
+
+# The really fast implementations customize the encoding into a 2-bit representation
+# and also customize the hash function. We don't do that here, since our goal is so track
+# perf of slicing and the default dict[str, ...] implementation.
+let dna = (stdin.bytes.lines()
+    .skipUntil((x) => x.startswith ">THREE")
+    .skip(1)
+    .takeUntil((x) => x.startswith ">").map(uppercase).join())
+
+func build_table(n):
+  let table = {}
+  for (start) in range(0, dna.length() - n + 1):
+    set table[dna.slice(start, start + n)] += 1
+  return table
+
+func table(n):
+  let table = build_table n
+  for (pair) in table.sort_by(flip):
+     print $"{pair.key} {pair.value%0.3f}"
+
+func count(s):
+  print $"{build_table(s.length())[s]}\t{s}"
+
+table 1
+table 2
+count "GGT"
+count "GGTA"
+count "GGTATT"
+count "GGTATTTTAATT"
+count "GGTATTTTAATTTATAGT"

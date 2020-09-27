@@ -1,0 +1,41 @@
+# regex-redux mainly an exercise of the regular expression library
+# Short Term Goals:
+# - Get this syntax parsed/typechecked, implement regex and stdout/stdin libraries
+# Medium Goals:
+# - Homebrew regex library, compile time precalculation
+# Future Goals:
+# Coral can demo a couple fancy features here:
+# 1. constexpr the regexes at compile time
+# 2. detect parallelism: calculate that the first for loop branches and
+# the sub_patterns loop are independent automatically. This is nontrivial
+# and requires using IO state in the type system.
+import regex
+
+let seq = stdin.bytes.read()
+let len1 = seq.length()
+let seq = seq.replace(regex ">.*\n|\n", "")
+let len2 = seq.length()
+
+let search_patterns = [
+    "agggtaaa|tttaccct",
+    "[cgt]gggtaaa|tttaccc[acg]",
+    "a[act]ggtaaa|tttacc[agt]t",
+    "ag[act]gtaaa|tttac[agt]ct",
+    "agg[act]taaa|ttta[agt]cct",
+    "aggg[acg]aaa|ttt[cgt]ccct",
+    "agggt[cgt]aa|tt[acg]accct",
+    "agggta[cgt]a|t[acg]taccct",
+    "agggtaa[cgt]|[acg]ttaccct"]
+for (p) in search_patterns:
+   print(p, seq.matches(regex p).length())
+
+let sub_patterns = [
+    ["tHa[Nt]",            "<4>"],
+    ["aND|caN|Ha[DS]|WaS", "<3>"],
+    ["a[NSt]|BY",          "<2>"],
+    ["<[^>]*>",            "|"],
+    ["\\|[^|][^|]*\\|",      "-"]]
+for (p, repl) in sub_patterns:
+   set seq = seq.replace(regex p, repl)
+
+printf("\n{len1}\n{len2}\n{seq.length()}")

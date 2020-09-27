@@ -7,6 +7,7 @@ type token =
   | RBRACKET
   | RBRACE
   | OTHER of char
+  | CHAR of char
   | OPERMUL of string
   | OPERCMP of string
   | OPERATOR of string
@@ -33,4 +34,4 @@ type token =
   | DEDENT
   | COMMA
   | COLON
-[@@deriving show] 
+[@@deriving show]

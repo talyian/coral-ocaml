@@ -6,9 +6,9 @@ open Coral_core.Ast
 %token <string> FLOAT
 %token <string> OPERATOR OPERADD OPERMUL OPERCMP
 %token <string> IDENTIFIER STRING
-%token <char> OTHER
+%token <char> OTHER CHAR
 %token <int> NEWLINE
-%token FUNC IF ELSE ELIF COMMA ELLIPSIS RETURN LET SET
+%token FUNC IF ELSE ELIF FOR IN COMMA ELLIPSIS RETURN LET SET
 %token LPAREN RPAREN COLON LBRACE RBRACE LBRACKET RBRACKET
 %token INDENT DEDENT TYPE
 %token EQ DOT
@@ -23,9 +23,9 @@ open Coral_core.Ast
 main
   : newlines? x=lines EOF { Module(make_module x) }
   | newlines? x=lines_nl EOF { Module(make_module x) }
-        
+
 newlines: NEWLINE+ { }
-                                                       
+
 lines
                 : line { [$1] }
                 | lines_nl line { $1 @ [$2] }
@@ -36,13 +36,13 @@ line
   | LET name=IDENTIFIER COLON t=typedef EQ e=expr {
       Let({name=name;target=None;varType=Some(t)}, e)
     }
-  | SET name=IDENTIFIER EQ e=expr { Set({name=name;target=None;varType=None}, e) }
+  | SET expr_op_unit EQ e=expr { Set({name="?";target=None;varType=None}, e) }
+  | SET expr_op_unit OPERATOR expr { Empty }
   | RETURN arg=expr { Return {node=arg;coraltype=None} }
   | RETURN { Return {node=Tuple [];coraltype=None} }
   | e=expr { e }
-        |       e=ifexpr {e}
-  | e=tuple_def { TupleDef e }
-
+  | e=ifexpr { e }
+  | e=forexpr {e}
 func_name
   : IDENTIFIER { $1 }
   | IDENTIFIER LBRACKET typedef RBRACKET { $1 }
@@ -63,7 +63,9 @@ elifexpr
   : ELIF cond=expr2 body=block_or_line NEWLINE { (cond, body) }
 elseexpr
   : ELSE body=block_or_line NEWLINE { body }
-                                 
+
+forexpr : FOR LPAREN paramlist RPAREN IN expr block_or_line { Empty }
+
 block
   : newlines? lines=lines DEDENT { Block(lines) }
   | newlines? lines=lines_nl DEDENT { Block(lines) }
@@ -75,18 +77,18 @@ block_or_line
 expr_atom
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
+  | e=CHAR { CharLiteral e }
   | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
   /* | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET */
   /*     { Var {name=e; target=None; varType=None} } */
   | e=STRING { StringLiteral e }
-  | LPAREN e=expr2 RPAREN { e }
+  | LPAREN e=e_exprlist RPAREN { match e with | [x] -> x | e -> Tuple e }
+  | LBRACKET e=e_exprlist RBRACKET { match e with | [x] -> x | e -> List e }
   | e=member { Member e }
 (* Higher Precedence than operators *)
 expr_op_unit
   : e=expr_atom { e }
-  | callee=expr_atom LPAREN args=exprlist RPAREN { Call (callNode callee args) }
-  | callee=expr_atom LPAREN RPAREN { Call (callNode callee []) }
-  | callee=expr_atom arg=expr_atom { Call (callNode callee [arg]) }
+  | callee=expr_op_unit arg=expr_atom { Call (callNode callee [arg]) }
 
 expr0
   : e=expr_op_unit { e }
@@ -104,6 +106,7 @@ expr2
 
 expr : e=expr2 { e }
 
+e_exprlist : { [] } | exprlist { $1 }
 exprlist
   : e=expr { [e] }
   | x=exprlist COMMA e=expr { x@[e] }
@@ -128,10 +131,3 @@ typedefList : separated_nonempty_list(COMMA, typedef) { $1 }
 member
 : base=expr_atom DOT member=IDENTIFIER
   { { base=base; memberName=member; basetype=Type ""; memberIndex=0} }
-
-tuple_def
-: TYPE name=IDENTIFIER EQ LBRACE fields=separated_list(COMMA, tuple_field) RBRACE
-  { {name=name;fields=fields} }
-
-tuple_field
-  : IDENTIFIER COLON typedef { ($1, $3) }

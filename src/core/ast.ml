@@ -1,5 +1,5 @@
 open Base
-    
+
 type coraltype =
   | Free
   | Type of string
@@ -80,6 +80,7 @@ type node =
   | If of (node * node * node)
   | IntLiteral of string
   | FloatLiteral of string
+  | CharLiteral of char
   | StringLiteral of string
   | Var of node varInfo
   | Def of node defInfo
@@ -88,10 +89,13 @@ type node =
   | Block of node list
   | Call of node callInfo
   | Tuple of (node list)
+  | List of (node list)
   | TupleDef of tupleInfo
   | Member of node memberInfo
   | Return of node typeInfo
   | Empty
+[@@deriving show, sexp, fields]
+
 type defNode = node defInfo
 
 let newFunc (name, ret, params, body) = {
@@ -100,7 +104,7 @@ let newFunc (name, ret, params, body) = {
     params=params;
     body=body }
 
-let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc" | Member _ -> "Member" | TupleDef _ -> "TupleDef"
+let nodeName = function | Module _ -> "Module"  | Func _ -> "Func"  | Comment _ -> "Comment"  | If _ -> "If"  | IntLiteral _ -> "IntLiteral"  | FloatLiteral _ -> "FloatLiteral"  | StringLiteral _ -> "StringLiteral"  | Var _ -> "Var"  | Def _ -> "Def"  | Block _ -> "Block"  | Call _ -> "Call"  | Tuple _ -> "Tuple"  | Return _ -> "Return"  | Empty -> "Empty"  | Binop _ -> "Binop"  | Let _ -> "Let" | Set _ -> "Set" | Multifunc _ -> "Multifunc" | Member _ -> "Member" | TupleDef _ -> "TupleDef" | List _ -> "List"
 
 let show_indent n = for _ = 1 to n do Stdio.printf "  " done
 
@@ -112,7 +116,7 @@ let needs_parentheses_for_call = function
 
 let string_escape = String.escaped
 
-let string_name_escape s = 
+let string_name_escape s =
   Re.replace_string (Re.Pcre.regexp {|\n|\t| |}) ~by:"_" s
 
 let binop (op, lhs, rhs) = Binop {
@@ -122,4 +126,3 @@ let binop (op, lhs, rhs) = Binop {
   coraltype=None;
   overloadIndex=0
 }
-

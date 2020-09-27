@@ -1,0 +1,63 @@
+let alu = (
+   "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG" +
+   "GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA" +
+   "CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT" +
+   "ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA" +
+   "GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG" +
+   "AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC" +
+   "AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA")
+
+let iub = [
+    ('a', 0.27), ('c', 0.12), ('g', 0.12), ('t', 0.27),
+    ('B', 0.02), ('D', 0.02), ('H', 0.02), ('K', 0.02),
+    ('M', 0.02), ('N', 0.02), ('R', 0.02), ('S', 0.02),
+    ('V', 0.02), ('W', 0.02), ('Y', 0.02)]
+
+let homo = [
+    ('a', 0.3029549426680),
+    ('c', 0.1979883004921),
+    ('g', 0.1975473066391),
+    ('t', 0.3015094502008)]
+
+let seed = i32 42
+let ia = i32 3877
+let ic = i32 29573
+let im = i32 138868
+
+func random():
+    seed = (seed * ia + ic) % im
+    return seed / f32 im
+
+let width = 60
+func repeatFasta(src, n):
+    for (row) in range(n // width):
+        start = row * width % src.length()
+        print src.slice(start, start + width)
+    if n % width:
+        print src.slice(n // width * width, n)
+
+func randomFasta(freq, n):
+    let keys = []
+    let vals = []
+    let total = 0
+    for (prob, c) in freq:
+        set total += prob
+        keys.push total
+        vals.push c
+    for (row) in range(n // width):
+        for (i) in range width:
+           stdout.write(vals[keys.bisect_index(random())])
+        stdout.write '\n'
+    if n % width:
+        for (i) in range (n % width):
+           stdout.write(vals[keys.bisect_index(random())])
+        stdout.write '\n'
+
+print ">ONE Homo sapiens alu"
+repeat(alu, n * 2)
+
+print ">TWO IUB ambiguity codes"
+random(iub, n * 3)
+
+print ">THREE Homo sapiens frequency"
+random(homo, n * 5)

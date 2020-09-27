@@ -1,0 +1,31 @@
+# Reverse Complement
+#
+# I used to think this benchmark wasn't very useful but now I'm trying
+# really hard to do this in a vectorized loop.
+#
+# based on Adam Kewley's C implementation
+
+let buffer = []
+func show(buffer):
+   # len = NLINES * 61 - (60 - last_line_length)
+   # so offset = (len + 60) % 61
+   # we can modify the shuffle mapping to shift the newline to the end while reversing
+   for i in range(0, line.length(), step=16):
+      let v = sse.m128i(line.slice(rev i, length=16))
+      let v = v.shuffle(sse.reversed)
+      let v = v & 0x1f                        # mm_and_epi8(mm_set1(0x1f))
+      let l = "-TVGH--CD-\nM-KN-"[v + 0x70]   # mm_shuffle_epi8(mm_add(mm_set1))
+      let h = "--YSAABW--R-----"[v - 0x10]    # mm_shuffle_epi8(mm_sub(mm_set1))
+      stdout.bytes.write(sse.to_bytes(l | h)) # mm_or
+   stdout.bytes.write '\n'
+
+while True:
+   let line = stdin.bytes.read_line(keep=True)
+   if line = null or line.startsWith '>':
+      if buffer:
+         show buffer
+      if not line:
+         return
+      stdout.write line
+   else:
+      buffer.extend line

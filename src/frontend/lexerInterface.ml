@@ -16,10 +16,9 @@ let print_tokens lexbuf =
     | Token.EOF -> ();
     | t ->
       print_endline @@ Token.show_token t;
-      loop ctx 
+      loop ctx
   in loop {tokenqueue=[]; indents=[0]; nestlevel=0}
 
 let create_tokenizer () =
   let state ={tokenqueue=[]; indents=[0]; nestlevel=0}  in
   fun buf -> expand_tokens Lexer.coral_token state buf
-      

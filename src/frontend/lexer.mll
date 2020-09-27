@@ -7,8 +7,10 @@ type lexContext = {
   mutable nestlevel: int;
 }
 
-let nest ctx = ctx.nestlevel <- ctx.nestlevel + 1
-let unnest ctx = ctx.nestlevel <- ctx.nestlevel - 1
+let nest ctx =
+  ctx.nestlevel <- ctx.nestlevel + 1
+let unnest ctx =
+  ctx.nestlevel <- ctx.nestlevel - 1
 
 (* TODO: A push parser should make this cleaner since we can just push tokens as
 needed instead of maintaining a mutable token queue to handle generating
@@ -19,7 +21,8 @@ let handle_newline indent_len ctx lexbuf =
         pos_bol = lexbuf.lex_start_pos + 1;
         pos_lnum = lexbuf.lex_curr_p.pos_lnum + 1;
      };
-     let nl = Token.NEWLINE indent_len in      
+
+     let nl = Token.NEWLINE indent_len in
      let indents = match ctx.nestlevel, ctx.indents with
        | 0, n :: _ when n < indent_len ->
            ctx.indents <- indent_len :: ctx.indents;
@@ -32,8 +35,9 @@ let handle_newline indent_len ctx lexbuf =
                   pop (Token.DEDENT :: Token.NEWLINE n :: dedents)
               | _ -> dedents
            in nl :: pop []
-       | _ -> [nl] in
-       indents  
+       | 0, _ -> [nl]
+       | _ -> [] in
+       indents
 
 (* If we parse operators are separate token types, we can use different
 production rules in the grammar to handle precedence. TODO-wish: Instead of
@@ -58,16 +62,17 @@ rule coral_token ctx = parse
   | "elif" { [Token.ELIF] }
   | "for" { [Token.FOR] }
   | "in"  { [Token.IN] }
-  
+
   | "type" { [Token.TYPE] }
   | "let" { [Token.LET] }
   | "set" { [Token.SET] }
 
+  | '"' { [string_token (Buffer.create 1024) lexbuf] }
+  | '\'' { [Token.CHAR(char_token lexbuf)] }
   | "=" { [Token.EQ] }
   | '-'? '0' 'x' ['0'-'9']+ as tok { [Token.INTEGER(tok)] }
   | '-'? ['0'-'9']+ as tok { [Token.INTEGER(tok)] }
   | '-'? ['0'-'9']+ '.' ['0'-'9']+ as tok { [Token.FLOAT(tok)] }
-  | '"' { [string_token (Buffer.create 1024) lexbuf] }
   | '.' { [Token.DOT] }
   | '(' { nest ctx; [Token.LPAREN] }
   | ')' { unnest ctx; [Token.RPAREN] }
@@ -80,8 +85,8 @@ rule coral_token ctx = parse
   | '#' { comment ctx lexbuf }
   | '\n' [' ']* as tok { handle_newline (String.length tok - 1) ctx lexbuf }
   | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }
-  | "..." { [Token.ELLIPSIS] }
   | ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok { [Token.IDENTIFIER(tok)] }
+  | "..." { [Token.ELLIPSIS] }
   | _ as tok { [Token.OTHER(tok)] }
   | eof { handle_newline 0 ctx lexbuf @ [Token.EOF] }
 and comment ctx = parse
@@ -89,15 +94,18 @@ and comment ctx = parse
   | _ { comment ctx lexbuf }
 and string_token buf = parse
   | '"' { Token.STRING(Buffer.contents buf) }
-  | '\\' '"' { Buffer.add_char buf '"'; string_token buf lexbuf }
-  | "\\n" { Buffer.add_char buf '\n'; string_token buf lexbuf }
-  | "\\t" { Buffer.add_char buf '\t'; string_token buf lexbuf }
-  | "\\x" ['0'-'9' 'a'-'f' 'A'-'F'] ['0'-'9' 'a'-'f' 'A'-'F']  as tok
-    { let num = String.sub tok 2 2 in
-     let n = (Scanf.sscanf num "%x" (fun x -> x)) in
-     Printf.printf "num: %s n: %d\n" num n;
-     Buffer.add_char buf (Char.chr n);
-     string_token buf lexbuf }
+  | '\\' { Buffer.add_char buf @@ parse_escape '"' lexbuf; string_token buf lexbuf }
   | eof { failwith "unterminated string" }
-  | '\\' { failwith "unrecognized escape" } 
+  | '\\' { failwith "unrecognized escape" }
   | _ as c { Buffer.add_char buf c; string_token buf lexbuf }
+and parse_escape endquote = parse
+  | 'n' { '\n' }
+  | 't' { '\t' }
+  | '\\' { '\\' }
+  | 'x' ['0'-'9' 'a'-'f' 'A'-'F'] ['0'-'9' 'a'-'f' 'A'-'F'] as tok { Char.chr @@ Base.Int.of_string @@ "0" ^ tok }
+  |  _ as c  { if c = endquote then c else failwith ("invalid escaped quote:" ^ Base.Char.to_string c) }
+and char_token = parse
+  | '\'' { failwith "empty char constant" }
+  | '\\' { end_char_token (parse_escape '\'' lexbuf) lexbuf  }
+  | _ as c { end_char_token c lexbuf }
+and end_char_token c = parse '\'' { c } | _ { failwith "expected '" }

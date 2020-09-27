@@ -2,7 +2,7 @@
  (name tests)
  (inline_tests (flags -verbose))
  (modules tests)
- (libraries coral_frontend)
+ (libraries unix coral_frontend)
  (preprocess (pps ppx_inline_test))
  )
 
