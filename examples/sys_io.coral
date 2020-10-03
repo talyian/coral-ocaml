@@ -1,0 +1,4 @@
+let sys_io =
+   if sys.platform.IsWin32: import sys_io.windows
+   elif sys.platform.IsPosix: import sys_io.posix
+   else: unreachable "unknown platform"

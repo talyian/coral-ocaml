@@ -1,5 +1,6 @@
 %{
 open Coral_core.Ast
+module Type = Coral_core.Type
 %}
 
 %token <string> INTEGER
@@ -8,28 +9,34 @@ open Coral_core.Ast
 %token <string> IDENTIFIER STRING
 %token <char> OTHER CHAR
 %token <int> NEWLINE
-%token FUNC IF ELSE ELIF FOR IN COMMA ELLIPSIS RETURN LET SET
+%token FUNC IF ELSE ELIF FOR IN RETURN LET SET
 %token LPAREN RPAREN COLON LBRACE RBRACE LBRACKET RBRACKET
 %token INDENT DEDENT TYPE
+%token COMMA ELLIPSIS SEMICOLON
 %token EQ DOT
 %token EOF
 
+%left OPERMUL
+%left OPERADD
+%left OPERATOR
+%left EQ OPERCMP
+
 %start main
-%type <Coral_core.Ast.node> expr line block main
-%type <Coral_core.Ast.node list> lines
-%type <Coral_core.Ast.node list> paramlist
+%type <Coral_core.Ast.node> main
 %%
 
 main
-  : newlines? x=lines EOF { Module(make_module x) }
-  | newlines? x=lines_nl EOF { Module(make_module x) }
+  : newlines? x=lines EOF { Module(Make.moduleNode x) }
+  | newlines? x=lines_nl EOF { Module(Make.moduleNode x) }
 
 newlines: NEWLINE+ { }
 
-lines
-                : line { [$1] }
-                | lines_nl line { $1 @ [$2] }
-lines_nl : lines newlines { $1 }
+lines_nl: terminated_line { [$1] }
+        |  lines_nl NEWLINE { $1 }
+        | lines_nl terminated_line { $1 @ [$2] }
+
+lines : lines_nl line { $1 @ [$2] }
+
 line
   : func_declaration { $1 }
   | LET name=IDENTIFIER EQ e=expr { Let({name=name;target=None;varType=None}, e) }
@@ -38,29 +45,39 @@ line
     }
   | SET expr_op_unit EQ e=expr { Set({name="?";target=None;varType=None}, e) }
   | SET expr_op_unit OPERATOR expr { Empty }
-  | RETURN arg=expr { Return {node=arg;coraltype=None} }
-  | RETURN { Return {node=Tuple [];coraltype=None} }
+  | RETURN arg=expr { arg }
+  | RETURN { Tuple [] }
   | e=expr { e }
-  | e=ifexpr { e }
   | e=forexpr {e}
+
+terminated_line
+        :       line NEWLINE { $1 }
+        |       ifexpr { $1 }
+        |       type_definition NEWLINE { $1 }
+                        ;
 func_name
   : IDENTIFIER { $1 }
   | IDENTIFIER LBRACKET typedef RBRACKET { $1 }
 
+(* path_segment represents a type or module name *)
+path_name
+  : IDENTIFIER { [$1] }
+  | path_name DOT n=IDENTIFIER { $1 @ [n] }
+
 func_return : COLON ret=typedef { ret }
 func_params : LPAREN p=paramlist RPAREN { p }
 func_body   : block_or_line { $1 }
+
 func_declaration
-  : FUNC name=func_name ret=func_return? p=func_params body=func_body
-    { let ret = match ret with | Some (v) -> v | None -> Type "" in
-      Func(newFunc (name, ret, p, body)) }
+  : FUNC name=path_name ret=func_return? p=func_params body=func_body {
+      Func(Make.funcNode (List.nth name 0, ret, p, body)) }
 
 ifexpr
-  : IF cond=expr2 ifbody=block_or_line NEWLINE
+  : IF cond=binary_op_expr ifbody=block_or_line NEWLINE
     elifexpr*
     elsebody=elseexpr? { If(cond, ifbody, Option.value elsebody ~default:Empty) }
 elifexpr
-  : ELIF cond=expr2 body=block_or_line NEWLINE { (cond, body) }
+  : ELIF cond=binary_op_expr body=block_or_line NEWLINE { (cond, body) }
 elseexpr
   : ELSE body=block_or_line NEWLINE { body }
 
@@ -84,50 +101,44 @@ expr_atom
   | e=STRING { StringLiteral e }
   | LPAREN e=e_exprlist RPAREN { match e with | [x] -> x | e -> Tuple e }
   | LBRACKET e=e_exprlist RBRACKET { match e with | [x] -> x | e -> List e }
-  | e=member { Member e }
+  | e=member { e }
+  | e=expr COLON typedef { e }
+
 (* Higher Precedence than operators *)
 expr_op_unit
   : e=expr_atom { e }
-  | callee=expr_op_unit arg=expr_atom { Call (callNode callee [arg]) }
+  | callee=expr_op_unit arg=expr_atom { Call (Make.callNode callee [arg]) }
 
-expr0
+binary_op_expr
   : e=expr_op_unit { e }
-  | lhs=expr0 op=OPERMUL rhs=expr0 { binop (op, lhs, rhs) }
+  | lhs=binary_op_expr op=OPERMUL rhs=binary_op_expr { Make.binop (op, lhs, rhs) }
+  | lhs=binary_op_expr op=OPERADD rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
+  | lhs=binary_op_expr op=OPERATOR rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
+  | l=binary_op_expr o=OPERCMP r=binary_op_expr { Make.binop (o, l, r) }
+  | l=binary_op_expr EQ r=binary_op_expr { Make.binop ("=", l, r) }
 
-expr1
-  : e=expr0 { e }
-  | lhs=expr1 op=OPERADD rhs=expr1 { binop(op, lhs, rhs) }
-  | lhs=expr1 op=OPERATOR rhs=expr1 { binop(op, lhs, rhs) }
 
-expr2
-  : e=expr1 { e }
-  | l=expr2 o=OPERCMP r=expr2 { binop (o, l, r) }
-  | l=expr2 EQ r=expr2 { binop ("=", l, r) }
+expr : e=binary_op_expr { e }
 
-expr : e=expr2 { e }
+typedef : IDENTIFIER { Coral_core.Type.Name "" }
 
 e_exprlist : { [] } | exprlist { $1 }
+
 exprlist
   : e=expr { [e] }
   | x=exprlist COMMA e=expr { x@[e] }
 
+paramlist : separated_list(COMMA, param) { $1 }
 param
-  : e=IDENTIFIER { Def {name=e; defType=None} }
-  | e=IDENTIFIER COLON t=typedef { Def {name=e; defType=Some t} }
-  | ELLIPSIS { Def {name="..."; defType=Some (Type "...") } }
-paramlist
-  : e=non_empty_paramlist { e }
-  | { [] }
-non_empty_paramlist
-  : p=param { [p] }
-  | x=paramlist COMMA p=param { x@[p] }
-
-typedef
-  : e=IDENTIFIER { Type e }
-  | ELLIPSIS { Type "..." }
-  | e=IDENTIFIER LBRACKET params=typedefList RBRACKET { Parameterized(e, params) }
-typedefList : separated_nonempty_list(COMMA, typedef) { $1 }
+  : IDENTIFIER COLON typedef { Empty }
+  | IDENTIFIER { Empty }
 
 member
-: base=expr_atom DOT member=IDENTIFIER
-  { { base=base; memberName=member; basetype=Type ""; memberIndex=0} }
+  : base=expr_atom DOT member=IDENTIFIER
+    { Member { base=base; memberName=member; } }
+
+type_definition
+  : TYPE name=IDENTIFIER EQ metatype=IDENTIFIER LBRACE separated_list(SEMICOLON, typedecl_field) RBRACE { Empty }
+
+typedecl_field
+  : IDENTIFIER COLON typedef { Empty }

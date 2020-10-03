@@ -9,7 +9,7 @@ let dna = (stdin.bytes.lines()
     .takeUntil((x) => x.startswith ">").map(uppercase).join())
 
 func build_table(n):
-  let table = {}
+  let table = DefaultDict()
   for (start) in range(0, dna.length() - n + 1):
     set table[dna.slice(start, start + n)] += 1
   return table

@@ -1,0 +1,59 @@
+# wraps Unix syscalls to implement FdReader
+# let open = extern("c", "open", Func[Int32][pathname:Cstr, flags:Int32])
+# let close = extern("c", "close", Func[Int32][Int32])
+# let read = extern("c", "read", Func[IntSize][fd:Int, buf:Ptr[Uint8], count:UintSize])
+# let write = extern("c", "write", Func[IntSize][fd:Int, buf:Ptr[Uint8], count:UintSize])
+
+## A Buffered File Reader
+type FdReader = struct {
+  fd: Int32;
+  buf_size: Int32 = 1024;
+  buffer: Ptr[Uint8] = malloc buf_size;
+  buf_end: Int32 = 0;
+  buf_start: Int32 = 0;
+}
+
+@[public, static]
+func FdReader.open(path):
+  return FdReader(fd=open(path, 0))
+
+# This is a generalization of readAll/readLine/readChunk For performance, it
+# should be inlined in each of the three cases, since removing the extraneous
+# checks is probably significant.
+func FdReader.read(end:Option[Uint8], limit:Option[Int32]):
+  for i in range(buf_start, buf_end):
+    if buf[i] = end || i = limit:
+      set buf_start = i + 1
+      return Str(buf + buf_start, buf_end - buf_start)
+  let this_buffer = Str(buf + buf_start, buf_end - buf_start)
+  set buf_start = 0
+  set buf_end = read(fd, buffer, buf_size)
+  if bufend = 0:
+    return this_buffer
+  else:
+    return this_buffer + readLine()
+
+## Read to EOF
+func FdReader.readAll(): return inline_call(this.read, None, None)
+## Read to end of line
+func FdReader.readLine(end:Uint8='\n'): return inline_call(this.read, end, None)
+## Read up to a fixed number of bytes or EOF
+func FdReader.readChunk(len): return inline_call(this.read, None, len)
+
+## A Buffered File Writer
+type FdWriter = struct {
+  fd: Int32;
+  buf_size: Int32 = 1024;
+  buffer: Ptr[Uint8] = malloc buf_size;
+  buf_end: Int32 = 0;
+  buf_start: Int32 = 0;
+}
+
+func FdWriter.write(s:Str):
+  # TODO: buffer writes
+  write(fd, s.buf, s.len)
+
+## TODO: do we need unbuffered or two-way read/write IO?
+let stdin = FdReader(fd=0)
+let stdout = FdWriter(fd=1)
+let stderr = FdWriter(fd=2)

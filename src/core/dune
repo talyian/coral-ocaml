@@ -1,4 +1,5 @@
 (library
  (name coral_core)
  (libraries re stdio base)
- )
+ (preprocess
+  (pps ppx_deriving.show ppx_sexp_conv ppx_fields_conv)))

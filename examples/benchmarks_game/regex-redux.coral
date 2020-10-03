@@ -11,7 +11,7 @@
 # and requires using IO state in the type system.
 import regex
 
-let seq = stdin.bytes.read()
+let seq = stdin.read()
 let len1 = seq.length()
 let seq = seq.replace(regex ">.*\n|\n", "")
 let len2 = seq.length()

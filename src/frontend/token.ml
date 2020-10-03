@@ -34,4 +34,5 @@ type token =
   | DEDENT
   | COMMA
   | COLON
+  | SEMICOLON
 [@@deriving show]

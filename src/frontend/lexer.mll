@@ -82,6 +82,7 @@ rule coral_token ctx = parse
   | ']' { unnest ctx; [Token.RBRACKET] }
   | ',' { [Token.COMMA] }
   | ':' { [Token.COLON] }
+  | ';' { [Token.SEMICOLON] }
   | '#' { comment ctx lexbuf }
   | '\n' [' ']* as tok { handle_newline (String.length tok - 1) ctx lexbuf }
   | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }

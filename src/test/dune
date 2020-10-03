@@ -1,0 +1,8 @@
+(library
+ (name tests)
+ (inline_tests
+  (flags -verbose))
+ (modules main)
+ (libraries unix coral_frontend)
+ (preprocess
+  (pps ppx_inline_test)))

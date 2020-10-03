@@ -31,10 +31,10 @@ func digits():
       set u = n2 * (k + 2)
       set n2 = w + u
       set d *= k * 2 + 1
-      set k += 1
+      set k+= 1
    digits ()
 
-for (i, d) in digits.take(n).indexed():
+for (i, d) in digits().take(n).indexed():
    stdout.write d
    if i % 10 == 9 or i == n - 1:
      print $"\t:{i+1}\n"
