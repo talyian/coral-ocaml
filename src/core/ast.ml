@@ -4,10 +4,12 @@ type 'a coraltype = 'a Type.t [@@deriving show, sexp_of]
 
 type 'a varInfo = {
   name : string;
-  mutable varType : 'a coraltype option;
-  mutable target : 'a option;
+  varType : 'a coraltype option;
 }
-[@@deriving show, sexp_of]
+[@@deriving sexp_of]
+let pp_varInfo (f:Formatter.t -> 'a -> unit) (fmt:Formatter.t) (v:'a varInfo) =
+  Stdlib.Format.fprintf fmt "%s" v.name;
+  match v.varType with | None -> () | Some t -> pp_coraltype f fmt t;
 
 type 'a funcInfo = {
   name : string;

@@ -41,19 +41,19 @@ fizzbuzz 15
 |}
 
 let%test "fasta" =
-  check_file_compiles "../../../examples/benchmarks_game/fasta.coral"
+  check_file_compiles "../../../../examples/benchmarks_game/fasta.coral"
 
 let%test "pidigits" =
-  check_file_compiles "../../../examples/benchmarks_game/pidigits.coral"
+  check_file_compiles "../../../../examples/benchmarks_game/pidigits.coral"
 
 let%test "knucleotide" =
-  check_file_compiles "../../../examples/benchmarks_game/knucleotide.coral"
+  check_file_compiles "../../../../examples/benchmarks_game/knucleotide.coral"
 
 let%test "regex-redux" =
-  check_file_compiles "../../../examples/benchmarks_game/regex-redux.coral"
+  check_file_compiles "../../../../examples/benchmarks_game/regex-redux.coral"
 
 let%test "sys-io.unix" =
-  check_file_compiles "../../../examples/sys_io.posix.coral"
+  check_file_compiles "../../../../examples/sys_io.posix.coral"
 
 let%test "indents" =
   check_source_compiles

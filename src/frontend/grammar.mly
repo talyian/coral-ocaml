@@ -16,10 +16,13 @@ module Type = Coral_core.Type
 %token EQ DOT
 %token EOF
 
-%left OPERMUL
-%left OPERADD
-%left OPERATOR
 %left EQ OPERCMP
+%left OPERATOR
+%left OPERADD
+%left OPERMUL
+
+%nonassoc COLON
+%nonassoc MORE_THAN_COLON
 
 %start main
 %type <Coral_core.Ast.node> main
@@ -39,11 +42,11 @@ lines : lines_nl line { $1 @ [$2] }
 
 line
   : func_declaration { $1 }
-  | LET name=IDENTIFIER EQ e=expr { Let({name=name;target=None;varType=None}, e) }
+  | LET name=IDENTIFIER EQ e=expr { Let({name=name;varType=None}, e) }
   | LET name=IDENTIFIER COLON t=typedef EQ e=expr {
-      Let({name=name;target=None;varType=Some(t)}, e)
+      Let({name=name;varType=Some(t)}, e)
     }
-  | SET expr_op_unit EQ e=expr { Set({name="?";target=None;varType=None}, e) }
+  | SET expr_op_unit EQ e=expr { Set({name="?";varType=None}, e) }
   | SET expr_op_unit OPERATOR expr { Empty }
   | RETURN arg=expr { arg }
   | RETURN { Tuple [] }
@@ -95,32 +98,34 @@ expr_atom
   : e=INTEGER { IntLiteral e }
   | e=FLOAT { FloatLiteral e }
   | e=CHAR { CharLiteral e }
-  | e=IDENTIFIER { Var {name=e; target=None; varType=None} }
+  | e=IDENTIFIER { Var {name=e; varType=None} }
   /* | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET */
   /*     { Var {name=e; target=None; varType=None} } */
   | e=STRING { StringLiteral e }
   | LPAREN e=e_exprlist RPAREN { match e with | [x] -> x | e -> Tuple e }
-  | LBRACKET e=e_exprlist RBRACKET { match e with | [x] -> x | e -> List e }
+  | LBRACKET e=e_exprlist RBRACKET { List e }
   | e=member { e }
-  | e=expr COLON typedef { e }
+  | e=expr_atom COLON typedef { e }
 
 (* Higher Precedence than operators *)
 expr_op_unit
-  : e=expr_atom { e }
-  | callee=expr_op_unit arg=expr_atom { Call (Make.callNode callee [arg]) }
+    : e=expr_atom %prec MORE_THAN_COLON { e }
+    | callee=expr_op_unit arg=expr_atom %prec MORE_THAN_COLON {Call (Make.callNode callee [arg])}
 
 binary_op_expr
-  : e=expr_op_unit { e }
-  | lhs=binary_op_expr op=OPERMUL rhs=binary_op_expr { Make.binop (op, lhs, rhs) }
-  | lhs=binary_op_expr op=OPERADD rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
-  | lhs=binary_op_expr op=OPERATOR rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
-  | l=binary_op_expr o=OPERCMP r=binary_op_expr { Make.binop (o, l, r) }
-  | l=binary_op_expr EQ r=binary_op_expr { Make.binop ("=", l, r) }
+    : e=expr_op_unit { e }
+    | lhs=binary_op_expr op=OPERMUL rhs=binary_op_expr { Make.binop (op, lhs, rhs) }
+    | lhs=binary_op_expr op=OPERADD rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
+    | lhs=binary_op_expr op=OPERATOR rhs=binary_op_expr { Make.binop(op, lhs, rhs) }
+    | l=binary_op_expr o=OPERCMP r=binary_op_expr { Make.binop (o, l, r) }
+    | l=binary_op_expr EQ r=binary_op_expr { Make.binop ("=", l, r) }
 
 
-expr : e=binary_op_expr { e }
+expr
+    : e=binary_op_expr { e }
 
-typedef : IDENTIFIER { Coral_core.Type.Name "" }
+typedef
+    : IDENTIFIER { Coral_core.Type.Name "" }
 
 e_exprlist : { [] } | exprlist { $1 }
 
