@@ -13,7 +13,10 @@ type FdReader = struct {
   buf_start: Int32 = 0;
 }
 
-@[public, static]
+# @[public, static]
+# @public attribute it must be exported. Do we need this? Should'nt public be the default?
+# @static means no implicit `this` is passed. This is redundant information from the callee side
+# but it also forces callers to call via type rather than via instance.
 func FdReader.open(path):
   return FdReader(fd=open(path, 0))
 
@@ -21,7 +24,7 @@ func FdReader.open(path):
 # should be inlined in each of the three cases, since removing the extraneous
 # checks is probably significant.
 func FdReader.read(end:Option[Uint8], limit:Option[Int32]):
-  for i in range(buf_start, buf_end):
+  for (i) in range(buf_start, buf_end):
     if buf[i] = end || i = limit:
       set buf_start = i + 1
       return Str(buf + buf_start, buf_end - buf_start)
@@ -36,7 +39,9 @@ func FdReader.read(end:Option[Uint8], limit:Option[Int32]):
 ## Read to EOF
 func FdReader.readAll(): return inline_call(this.read, None, None)
 ## Read to end of line
-func FdReader.readLine(end:Uint8='\n'): return inline_call(this.read, end, None)
+# TODO: default parameter values
+# func FdReader.readLine(end:Uint8='\n'): return inline_call(this.read, end, None)
+func FdReader.readLine(): return inline_call(this.read, '\n', None)
 ## Read up to a fixed number of bytes or EOF
 func FdReader.readChunk(len): return inline_call(this.read, None, len)
 
