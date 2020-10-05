@@ -54,18 +54,19 @@ let parse_operator tok =
 }
 rule coral_token ctx = parse
   | ' ' { coral_token ctx lexbuf }
-  | "func" { [Token.FUNC] }
-  | "return" { [Token.RETURN] }
-
-  | "if" { [Token.IF] }
-  | "else" { [Token.ELSE] }
   | "elif" { [Token.ELIF] }
+  | "else" { [Token.ELSE] }
+  | "extern" { [Token.EXTERN] }
   | "for" { [Token.FOR] }
+  | "func" { [Token.FUNC] }
+  | "if" { [Token.IF] }
+  | "import" { [Token.IMPORT] }
   | "in"  { [Token.IN] }
-
-  | "type" { [Token.TYPE] }
   | "let" { [Token.LET] }
+  | "return" { [Token.RETURN] }
   | "set" { [Token.SET] }
+  | "type" { [Token.TYPE] }
+
 
   | '"' { [string_token (Buffer.create 1024) lexbuf] }
   | '\'' { [Token.CHAR(char_token lexbuf)] }

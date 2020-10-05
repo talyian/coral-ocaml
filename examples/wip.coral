@@ -1,1 +1,11 @@
-extern("c", "printf", Func[fmt:String])
+# import cstd (
+#   printf = c_printf,
+#   malloc = c_malloc,
+#   fopen = c_fopen,
+#   fwrite = c_fwrite,
+#   fread = c_fread,
+#   fclose = c_fclose)
+
+let cprintf = extern("c", "printf", Func[][Str, ...])
+func main():
+    cprintf("Hello, %s\n", "World")

@@ -13,6 +13,8 @@ type token =
   | OPERATOR of string
   | OPERADD of string
   | NEWLINE of int
+  | IMPORT
+  | EXTERN
   | LPAREN
   | LET
   | LBRACKET

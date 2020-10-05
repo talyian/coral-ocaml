@@ -3,6 +3,6 @@
  (inline_tests
   (flags -verbose))
  (modules main)
- (libraries unix coral_frontend)
+ (libraries coral coral_frontend)
  (preprocess
   (pps ppx_inline_test)))

@@ -1,18 +1,21 @@
 open Coral_core
 open Coral_frontend
+open Base
 
 let check_source_compiles source =
   match Frontend.parse_string source with
-  | Ok e -> print_endline @@ Ast.show_node e; true
+  | Ok e ->
+      let _ = Coral.Import_resolution.resolve e in
+      let e = Coral.Name_resolution.resolve e in
+      let _ = Coral.Llvm_backend.print_ir e in
+      (* Stdio.print_endline @@ Ast.show_node e; *)
+      true
   | Error e ->
-      Printf.eprintf "[%s]" (Frontend.show_parseError e);
+      Stdio.eprintf "[%s]" (Frontend.show_parseError e);
       false
 
 let check_file_compiles path =
   let source = Stdio.In_channel.read_all path in
   check_source_compiles source
 
-let%test "wip" =
-  (* why is pwd the root directory but Stdio.Inchannel reads relative to current file path? *)
-  Sys.getenv "PWD" |> Stdio.printf " [pwd] = %s\n";
-  check_file_compiles "../../../../../examples/wip.coral"
+let%test "wip" = check_file_compiles "../../../../../examples/wip.coral"
