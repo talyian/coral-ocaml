@@ -5,9 +5,11 @@ open Base
 let check_source_compiles source =
   match Frontend.parse_string source with
   | Ok e ->
-      let _ = Coral.Import_resolution.resolve e in
-      let e = Coral.Name_resolution.resolve e in
-      let _ = Coral.Llvm_backend.print_ir e in
+      let e = Coral.Init_func.run e in
+      let _imports = Coral.Import_resolution.resolve e in
+      let _ns = Coral.Name_resolution.resolve e in
+      (* let ts = Coral.Type_resolution.resolve e in *)
+      let _ = Coral.Llvm_backend.print_ir _ns e in
       (* Stdio.print_endline @@ Ast.show_node e; *)
       true
   | Error e ->

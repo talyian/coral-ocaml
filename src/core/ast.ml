@@ -5,10 +5,10 @@ open Base
    Before that, here are all the variant types for node: these are all parameterized with 'a = node.
    Why I did this instead of making them all recursive, I don't remember.
 *)
-type 'a coraltype = 'a Type.t [@@deriving show, sexp_of]
+type 'a coraltype = 'a Type.t [@@deriving show, sexp_of, compare]
 
 type 'a varInfo = { name : string; varType : 'a coraltype option }
-[@@deriving sexp_of]
+[@@deriving sexp_of, compare]
 
 (* we customize the impl for show_varInfo just to make it slightly less verbose *)
 let pp_varInfo (f : Formatter.t -> 'a -> unit) (fmt : Formatter.t)
@@ -22,18 +22,19 @@ type 'a funcInfo = {
   params : 'a list;
   body : 'a;
 }
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]
 
 type 'a moduleInfo = { name : string; lines : 'a list }
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]
 
 type 'a tupleInfo = { name : string; fields : (string * 'a coraltype) list }
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]
 
 type 'a memberInfo = { base : 'a; memberName : string }
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]
 
-type 'a callInfo = { callee : 'a; args : 'a list } [@@deriving show, sexp_of]
+type 'a callInfo = { callee : 'a; args : 'a list }
+[@@deriving show, sexp_of, compare]
 
 type node =
   | Module of node moduleInfo
@@ -62,7 +63,21 @@ type node =
   | Member of node memberInfo
   | Return of node
   | Empty
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]
+
+(* module for node type. maybe it should live here instead of in Ast.node? *)
+module Node = struct
+  module T = struct
+    type t = node
+
+    let compare = compare_node
+
+    let sexp_of_t = sexp_of_node
+  end
+
+  include T
+  include Comparable.Make (T)
+end
 
 let nodeName = function
   | Module _ -> "Module"
@@ -86,17 +101,6 @@ let nodeName = function
   | TupleDef _ -> "TupleDef"
   | List _ -> "List"
   | CharLiteral _ -> "CharLiteral"
-
-(* let needs_parentheses_for_call = function
- *   | Binop _ -> true
- *   | Tuple _ -> true
- *   | Call _ -> true
- *   | _ -> false *)
-
-(* let string_escape = String.escaped *)
-
-(* let string_name_escape s =
- *   Re.replace_string (Re.Pcre.regexp {|\n|\t| |}) ~by:"_" s *)
 
 (* some simplified constructors for ast nodes. I question whether these are really of any use *)
 module Make = struct

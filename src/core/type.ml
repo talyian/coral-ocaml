@@ -3,7 +3,8 @@
    Represents a type of a coral expression.
 
  *)
-open Sexplib0.Sexp_conv
+open Ppx_compare_lib.Builtin
+open Ppx_sexp_conv_lib.Conv
 
 type 'expr t =
   | Name of string
@@ -11,4 +12,4 @@ type 'expr t =
   | Dotted of 'expr t * string
   | Free of int * string
   | Decl of { metatype : string }
-[@@deriving show, sexp_of]
+[@@deriving show, sexp_of, compare]

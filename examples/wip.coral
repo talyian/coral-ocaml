@@ -7,5 +7,4 @@
 #   fclose = c_fclose)
 
 let cprintf = extern("c", "printf", Func[][Str, ...])
-func main():
-    cprintf("Hello, %s\n", "World")
+cprintf("Hello, %s\n", "World")

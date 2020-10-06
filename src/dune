@@ -1,6 +1,6 @@
 (library
  (name coral)
- (modules import_resolution name_resolution llvm_backend)
+ (modules import_resolution name_resolution init_func llvm_backend)
  (libraries coral_core coral_frontend str ctypes ctypes.foreign llvm
    llvm.analysis llvm.passmgr_builder llvm.executionengine)
  (preprocess
