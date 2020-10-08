@@ -26,8 +26,8 @@ module Type = Coral_core.Type
 %%
 
 main
-: newlines? x=lines EOF { Module(Make.moduleNode x) }
-| newlines? x=lines_nl EOF { Module(Make.moduleNode x) }
+: newlines? x=lines EOF { Make.moduleNode x }
+| newlines? x=lines_nl EOF { Make.moduleNode x }
 
 newlines
 : NEWLINE+ { }
@@ -45,14 +45,14 @@ declaractions should just be expressions. But perhaps this way the parse errors
 might be more understandable *)
 line
 : func_declaration { $1 }
-| LET name=IDENTIFIER EQ e=expr { Let({name=name;varType=None}, e) }
+| LET name=IDENTIFIER EQ e=expr { mm @@ Let({name=name;varType=None}, e) }
 | LET name=IDENTIFIER COLON t=typedef EQ e=expr {
-    Let({name=name;varType=Some(t)}, e)
+    mm @@ Let({name=name;varType=Some(t)}, e)
     }
-| SET expr_op_unit EQ e=expr { Set({name="?";varType=None}, e) }
-| SET expr_op_unit OPERATOR expr { Empty }
-| RETURN arg=expr { arg }
-| RETURN { Tuple [] }
+| SET expr_op_unit EQ e=expr { mm @@ Set({name="?";varType=None}, e) }
+| SET expr_op_unit OPERATOR expr { mm @@ Empty }
+| RETURN arg=expr { mm @@ Return arg }
+| RETURN { mm @@ Return(mm @@ Tuple []) }
 | e=expr { e }
 | e=forexpr {e}
 
@@ -77,49 +77,51 @@ func_params
 func_body
 : block_or_line { $1 }
 func_declaration
-: FUNC name=path_name ret=func_return? p=func_params body=func_body {Func(Make.funcNode (List.nth name 0, ret, p, body)) }
+: FUNC name=path_name ret=func_return? p=func_params body=func_body {Make.funcNode (List.nth name 0, ret, p, body) }
 
 ifexpr
     : IF cond=binary_op_expr ifbody=block_or_line NEWLINE
-elifexpr*
-    elsebody=elseexpr? { If(cond, ifbody, Option.value elsebody ~default:Empty) }
+    elifexpr*
+elsebody=elseexpr? {mm @@ If(cond, ifbody, Option.value elsebody ~default:(mm @@ Empty)) }
 elifexpr
     : ELIF cond=binary_op_expr body=block_or_line NEWLINE { (cond, body) }
 elseexpr
     : ELSE body=block_or_line NEWLINE { body }
 
 forexpr
-    : FOR LPAREN paramlist RPAREN IN binary_op_expr block_or_line { Empty }
+    : FOR LPAREN paramlist RPAREN IN binary_op_expr block_or_line { mm @@ Empty }
 
 block
-    : newlines? lines=lines DEDENT { Block(lines) }
-    | newlines? lines=lines_nl DEDENT { Block(lines) }
+    : newlines? lines=lines DEDENT { mm @@ Block(lines) }
+    | newlines? lines=lines_nl DEDENT { mm @@ Block(lines) }
 block_or_line
     : COLON NEWLINE INDENT e=block { e }
     | COLON e=line { e }
 
 (* Higher Precedence than calling *)
 expr_atom
-    : e=INTEGER { IntLiteral e }
-    | ELLIPSIS { Var {name="..."; varType=None} }
-    | e=FLOAT { FloatLiteral e }
-    | e=CHAR { CharLiteral e }
-    | e=IDENTIFIER { Var {name=e; varType=None} }
+    : e=INTEGER { mm @@ IntLiteral e }
+    | ELLIPSIS { mm @@ Var {name="..."; varType=None} }
+    | e=FLOAT { mm @@ FloatLiteral e }
+    | e=CHAR { mm @@ CharLiteral e }
+    | e=IDENTIFIER { mm @@ Var {name=e; varType=None} }
     /* | e=IDENTIFIER COLON LBRACKET params=typedefList RBRACKET */
     /*     { Var {name=e; target=None; varType=None} } */
-    | e=STRING { StringLiteral e }
-    | LPAREN e=e_exprlist RPAREN { match e with | [x] -> x | e -> Tuple e }
-    | LBRACKET e=e_exprlist RBRACKET { List e }
+    | e=STRING { mm @@ StringLiteral e }
+    | LPAREN e=e_exprlist RPAREN { match e with | [x] -> x | e -> mm @@ Tuple e }
+    | LBRACKET e=e_exprlist RBRACKET { mm @@ List e }
     | e=member { e }
     /* | e=expr_atom COLON typedef { e } */
 
 (* Higher Precedence than operators *)
 expr_op_unit
     : e=expr_atom { e }
+(* so we can do this in the grammar, by making a expr_atom_but_not_tuple pattern
+   but doing it inside the reduction seems okay too *)
     | callee=expr_op_unit arg=expr_atom {
         match arg with
-        | Tuple args -> Call(Make.callNode callee args)
-        | arg -> Call (Make.callNode callee [arg]) }
+        | Tuple args, _ -> Make.callNode callee args
+        | arg -> Make.callNode callee [arg] }
 
 binary_op_expr
     : e=expr_op_unit { e }
@@ -138,8 +140,8 @@ In other places, we might be able to get away with requiring parentheses. *)
 expr
     : e=binary_op_expr { e }
     | expr_atom COLON typedef { $1 }
-    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Import {path;names=[`Module None]} }
-    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN RPAREN { Import {path;names=[`All]} }
+    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { mm @@ Import {path;names=[`Module None]} }
+    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN RPAREN { mm @@ Import {path;names=[`All]} }
     | EXTERN LPAREN fftype=STRING COMMA name=STRING COMMA _type=typedef RPAREN {
         Make.extern fftype name _type  }
 
@@ -157,15 +159,15 @@ exprlist
 
 paramlist : separated_list(COMMA, param) { $1 }
 param
-    : IDENTIFIER COLON typedef { Empty }
-    | IDENTIFIER { Empty }
+    : IDENTIFIER COLON typedef { mm @@ Empty }
+    | IDENTIFIER { mm @@ Empty }
 
 member
     : base=expr_atom DOT member=IDENTIFIER
-      { Member { base=base; memberName=member; } }
+      { mm @@ Member { base=base; memberName=member; } }
 
 type_definition
-    : TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE separated_list_trailing(SEMICOLON, typedecl_field) RBRACE { Empty }
+    : TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE separated_list_trailing(SEMICOLON, typedecl_field) RBRACE { mm @@ Empty }
 
 (* Like separated_list, but we can accept a trailing delimiter as well.  Not
    sure how to write this; the simple pattern "separated_list(S, X) S?" doesn't
@@ -182,5 +184,5 @@ separated_list_trailing_s(S, X)
     | separated_list_trailing_s(S, X) S { $1 }
 
 typedecl_field
-    : IDENTIFIER COLON typedef { Empty }
-    | IDENTIFIER COLON typedef EQ expr { Empty }
+    : IDENTIFIER COLON typedef { mm @@ Empty }
+    | IDENTIFIER COLON typedef EQ expr { mm @@ Empty }

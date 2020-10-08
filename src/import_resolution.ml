@@ -30,7 +30,7 @@ let try_read_file path =
 
 let rec resolve expr =
   match expr with
-  | Ast.Import import ->
+  | Ast.Import import, _ ->
       Stdio.printf "IMPORT\n";
       let filename = String.concat "/" import.path ^ ".coral" in
       let _found_module =

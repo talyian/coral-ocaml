@@ -1,4 +1,3 @@
-open Llvm
 open Coral_core
 open Base
 
@@ -6,10 +5,15 @@ type compileContext = {
   context : Llvm.llcontext;
   llmodule : Llvm.llmodule;
   main_func : Llvm.llvalue option;
-  current_func : Llvm.llvalue option;
-  builder : Llvm.llbuilder;
+  main_builder: Llvm.llbuilder;
   ns : Name_resolution.Names.t;
   llvals : (Ast.node, Llvm.llvalue, Ast.Node.comparator_witness) Map.t;
+}
+
+type func_compile_ctx = {
+  parent: compileContext;
+  current_func : Llvm.llvalue;
+  builder : Llvm.llbuilder;
 }
 
 module Lltype = struct
@@ -56,85 +60,122 @@ let rec codegen_at_any_level (data : compileContext) expr =
   match expr with
   | Ast.StringLiteral s ->
       (* let str = Llvm.const_stringz data.context s in *)
-      let globstr = Llvm.build_global_stringptr s "" data.builder in
+      let globstr = Llvm.build_global_stringptr s "" data.main_builder in
       (data, globstr)
   | Ast.IntLiteral i ->
       (data, Llvm.const_int_of_string (Llvm.i64_type data.context) i 10)
-  | expr -> failwith @@ Ast.show_node expr
+  | expr -> failwith @@ Ast.show_node_data expr
 
-let rec codegen_at_func_level (data : compileContext) expr =
+(* This should be the main implementatiaon of codegen. we use a llvm.builder
+   and construct llvm instructions for every node type *)
+let rec _codegen_func (fctx : func_compile_ctx) node =
+  let expr, _ = node in
+  Stdio.printf "   [codegen-func: %s]\n" (Ast.nodeName @@ fst node);
+  Stdlib.flush_all();
   match expr with
   | Ast.Block xs ->
-      let data, ll_items =
-        List.fold_map ~init:data ~f:codegen_at_func_level xs
+      let fctx, _ll_items =
+        List.fold_map ~init:fctx ~f:codegen_at_func_level xs
       in
-      (data, Llvm.const_int (Llvm.i1_type data.context) 0)
+      (fctx, Llvm.const_int (Llvm.i1_type fctx.parent.context) 0)
   | Ast.Call { callee; args } ->
       let data, ll_args =
-        List.fold_map ~init:data ~f:codegen_at_func_level args
+        List.fold_map ~init:fctx ~f:codegen_at_func_level args
       in
       let data, ll_callee = codegen_at_func_level data callee in
-      (data, Llvm.build_call ll_callee (Array.of_list ll_args) "" data.builder)
-  | Ast.Var { name; varType } ->
-      let llvalue =
-        Map.find data.ns.refs expr |> Option.bind ~f:(Map.find data.llvals)
-      in
-      (data, Option.value_exn llvalue)
-  | Ast.Return (Ast.Tuple []) -> (data, Llvm.build_ret_void data.builder)
-  | StringLiteral _ | IntLiteral _ -> codegen_at_any_level data expr
+      (data, Llvm.build_call ll_callee (Array.of_list ll_args) "" fctx.builder)
+  | Ast.Var _ ->
+      let reference = Map.find fctx.parent.ns.refs node in
+      (match reference with
+      | None -> failwith @@ "invalid reference: " ^ Ast.show_node node
+      | Some e -> codegen_at_func_level fctx e
+      )
+  | Ast.Func _ ->
+    let new_parent, lval = _codegen_at_module_level fctx.parent node in
+    {fctx with parent=new_parent}, lval
+  | Ast.Return value ->
+    let fctx, llval = codegen_at_func_level fctx value in
+    ( match Llvm.classify_type @@ Llvm.type_of llval  with
+      | Llvm.TypeKind.Void  -> fctx, Llvm.build_ret_void fctx.builder
+      | _ -> fctx, Llvm.build_ret llval fctx.builder)
+  | Ast.Tuple [] ->
+    fctx, Llvm.undef @@ Llvm.void_type fctx.parent.context
+  | Ast.Tuple items ->
+    let fctx, llitems = List.fold_map ~init:fctx ~f:codegen_at_func_level items in
+    fctx, Llvm.const_struct fctx.parent.context (Array.of_list llitems)
+  | StringLiteral _ | IntLiteral _ -> fctx, snd @@ codegen_at_any_level fctx.parent expr
   | expr ->
       Stdio.printf "Func-Codegen: %s\n" @@ Ast.nodeName expr;
-      (data, Llvm.const_int (Llvm.i1_type data.context) 0)
+      Stdio.print_endline @@ Ast.show_node_data expr;
+      (fctx, Llvm.const_int (Llvm.i1_type fctx.parent.context) 0)
 
-let rec codegen_at_module_level (data : compileContext) expr =
+and memoizef f data expr =
+  match Base.Map.find data.llvals expr with
+  | Some x -> data, x
+  | None ->
+    let data, result = f data expr in
+    memoize expr (data, result)
+
+and codegen_at_func_level (data:func_compile_ctx) expr =
+  match Base.Map.find data.parent.llvals expr with
+  | Some x -> data, x
+  | None ->
+    let data, result = _codegen_func data expr in
+    let p = {data.parent with llvals = Map.add_exn ~key:expr ~data:result data.parent.llvals } in
+    let data = {data with parent = p} in
+    (data, result)
+and codegen_at_module_level data expr = memoizef _codegen_at_module_level data expr
+and _codegen_at_module_level (data : compileContext) node =
   let open Ast in
+  let expr, _ = node in
   match expr with
   (* Extern declarations *)
-  | Call
-      {
-        callee = Var { name = "extern"; _ };
-        args = [ StringLiteral "c"; Var { name; varType = Some typ } ];
-      } ->
+  | Extern { binding = "c"; name; typ } ->
       let func =
         Llvm.declare_function name (Lltype.of_type data typ) data.llmodule
       in
-      memoize expr (data, func)
-  | Let (foo, bar) ->
+      (data, func)
+  | Let (_, bar) ->
       let data, ll_bar = codegen_at_module_level data bar in
-      memoize expr (data, ll_bar)
+       (data, ll_bar)
   | Func { name; ret_type; params; body } ->
-      (* let data, ll_params = List.fold_map ~init:data ~f:codegen_at_module_level params in *)
+    (* let data, ll_params = List.fold_map ~init:data ~f:codegen_at_module_level params in *)
       let ret_type =
         match ret_type with Some s -> s | None -> Coral_core.Type.Name "Void"
       in
+      ignore params;
       let ll_params = [||] in
       let ll_ret_type = Lltype.of_type data ret_type in
       let ll_func_type = Llvm.function_type ll_ret_type ll_params in
       let ll_func = Llvm.define_function name ll_func_type data.llmodule in
-      Llvm.position_at_end (Llvm.entry_block ll_func) data.builder;
-      let data, _ = codegen_at_func_level data body in
-      memoize expr (data, ll_func)
+      if String.equal name ".init" then
+        Llvm.position_at_end (Llvm.entry_block ll_func) data.main_builder;
+      let builder = Llvm.builder data.context in
+      Llvm.position_at_end (Llvm.entry_block ll_func) builder;
+      let fctx = {parent=data; current_func = ll_func; builder} in
+      let fctx, _ = codegen_at_func_level fctx body in
+      (fctx.parent, ll_func)
   | expr ->
       Stdio.printf "Codegen: %s\n" @@ Ast.nodeName expr;
-      Ast.recurse_unit (fun e -> codegen_at_module_level data e |> ignore) expr;
+      Ast.recurse_unit (fun e -> codegen_at_module_level data e |> ignore) node;
       Stdlib.flush_all ();
       (data, Llvm.const_int (Llvm.i1_type data.context) 0)
 
-let print_ir (ns : Name_resolution.Names.t) (Ast.Module { name; lines }) =
+let print_ir (ns : Name_resolution.Names.t) expr =
+  let name, lines =
+    match expr with
+    | Ast.Module { name; lines }, _ -> (name, lines)
+    | _ -> failwith "print_ir: expected module"
+  in
   let context = Llvm.create_context () in
   let llmodule = Llvm.create_module context name in
-  (* let llmain_func_type = Llvm.function_type (Llvm.void_type context) [||] in
-   * let func = Llvm.declare_function ".init" llmain_func_type llmodule in *)
-  let builder = Llvm.builder context in
-  (* let entry = Llvm.append_block context "entry" func in
-   * Llvm.position_at_end entry builder; *)
+  let main_builder = Llvm.builder context in
   let data =
     {
       context;
       llmodule;
-      builder;
+      main_builder;
       main_func = None;
-      current_func = None;
       ns;
       llvals = Map.empty (module Ast.Node);
     }
@@ -148,7 +189,6 @@ let print_ir (ns : Name_resolution.Names.t) (Ast.Module { name; lines }) =
   ( match Llvm_analysis.verify_module llmodule with
   | None -> ()
   | Some e ->
-      Stdio.printf "%s\n" @@ Llvm.string_of_llmodule llmodule;
       Stdio.printf "%s\n" e;
       Stdlib.flush_all () );
 
@@ -170,4 +210,4 @@ let print_ir (ns : Name_resolution.Names.t) (Ast.Module { name; lines }) =
       Llvm_executionengine.get_function_address ".init" ctype llengine
     in
     ignore (init_func ())
-  with exc -> Printexc.to_string exc |> Stdio.print_string
+  with exc -> Exn.to_string exc |> Stdio.print_string

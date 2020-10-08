@@ -16,37 +16,38 @@ let pp_varInfo (f : Formatter.t -> 'a -> unit) (fmt : Formatter.t)
   Stdlib.Format.fprintf fmt "%s" v.name;
   match v.varType with None -> () | Some t -> pp_coraltype f fmt t
 
-type 'a funcInfo = {
-  name : string;
-  ret_type : 'a coraltype option;
-  params : 'a list;
-  body : 'a;
-}
-[@@deriving show, sexp_of, compare]
-
-type 'a moduleInfo = { name : string; lines : 'a list }
-[@@deriving show, sexp_of, compare]
-
 type 'a tupleInfo = { name : string; fields : (string * 'a coraltype) list }
 [@@deriving show, sexp_of, compare]
 
 type 'a memberInfo = { base : 'a; memberName : string }
 [@@deriving show, sexp_of, compare]
 
-type 'a callInfo = { callee : 'a; args : 'a list }
-[@@deriving show, sexp_of, compare]
+module Info = struct
+  type t = { id : Id.t } [@@deriving show, sexp_of]
 
-type node =
-  | Module of node moduleInfo
+  let create () = { id = Id.next () }
+
+  let compare a b = compare a.id b.id
+end
+
+type node_data =
+  | Module of { name : string; lines : node list }
   | Import of {
       path : string list;
       names :
         [ `Module of string option | `All | `Member of string * string option ]
         list;
     }
-  | Func of node funcInfo
+  | Extern of { binding : string; name : string; typ : node Type.t }
+  | Func of {
+      name : string;
+      ret_type : node coraltype option;
+      params : node list;
+      body : node;
+    }
   | Comment of string
-  | Binop of node callInfo
+  | Binop of { callee : node; args : node list }
+  | Call of { callee : node; args : node list }
   | If of (node * node * node)
   | IntLiteral of string
   | FloatLiteral of string
@@ -56,32 +57,35 @@ type node =
   | Let of node varInfo * node
   | Set of node varInfo * node
   | Block of node list
-  | Call of node callInfo
   | Tuple of node list
   | List of node list
   | TupleDef of node tupleInfo
   | Member of node memberInfo
   | Return of node
   | Empty
-[@@deriving show, sexp_of, compare]
+[@@deriving show, sexp_of]
 
-(* module for node type. maybe it should live here instead of in Ast.node? *)
+and node = node_data * Info.t [@@deriving show, sexp_of]
+
+let compare_node (a : node) (b : node) = compare (snd a).Info.id (snd b).Info.id
+
 module Node = struct
   module T = struct
-    type t = node
-
-    let compare = compare_node
-
-    let sexp_of_t = sexp_of_node
+    type t = node [@@deriving sexp_of, compare]
   end
 
   include T
   include Comparable.Make (T)
+
+  module Map = struct
+    type 'v t = (T.t, 'v, comparator_witness) Map.t
+  end
 end
 
 let nodeName = function
   | Module _ -> "Module"
   | Import _ -> "Import"
+  | Extern _ -> "Extern"
   | Func _ -> "Func"
   | Comment _ -> "Comment"
   | If _ -> "If"
@@ -102,31 +106,29 @@ let nodeName = function
   | List _ -> "List"
   | CharLiteral _ -> "CharLiteral"
 
+let mm foo = (foo, Info.create ())
+
 (* some simplified constructors for ast nodes. I question whether these are really of any use *)
 module Make = struct
   let binop (op_name, lhs, rhs) =
     let op = { name = op_name; varType = None } in
-    Binop { callee = Var op; args = [ lhs; rhs ] }
+    mm @@ Binop { callee = mm @@ Var op; args = [ lhs; rhs ] }
 
-  let callNode (callee : node) (args : node list) : node callInfo =
-    { callee; args }
+  let callNode callee args = mm @@ Call { callee; args }
 
-  let moduleNode lines = { name = "module"; lines }
+  let funcNode (name, ret_type, params, body) =
+    mm @@ Func { name; ret_type; params; body }
 
-  let funcNode (name, ret_type, params, body) = { name; ret_type; params; body }
+  let moduleNode lines = mm @@ Module { name = "module"; lines }
 
-  let extern ffitype name _type =
-    Call
-      {
-        callee = Var { name = "extern"; varType = None };
-        args = [ StringLiteral ffitype; Var { name; varType = Some _type } ];
-      }
+  let extern binding name typ = mm @@ Extern { binding; name; typ }
 end
 
 let recurse_unit (f : node -> unit) e =
-  match e with
+  match fst e with
   | Module m -> List.iter ~f m.lines
-  | Binop { callee; args } | Call { callee; args } ->
+  | Extern _ -> ()
+  | Binop { callee; args; _ } | Call { callee; args; _ } ->
       f callee;
       List.iter ~f args
   | Tuple xs -> List.iter ~f xs
