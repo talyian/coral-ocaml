@@ -1,6 +1,13 @@
 open Coral_core
 open Base
 
+(* A scope is a lexical scope that contains a mapping of string names to nodes
+let x = 1
+loop:
+   let y = "2"
+   <-- here the scope would be {"y" -> Let(y, 2), parents=[{"x" -> Let(x, 1)}]}
+ *)
+
 module Scope = struct
   type t = {
     parent : t list;
@@ -20,27 +27,26 @@ module Scope = struct
     | None -> List.find_map ~f:(find ~name) scope.parent
 end
 
+(* Names.t names a nameresolver with a mapping of refs from Vars to Exprs that they reference *)
 module Names = struct
   type t = { current_scope : Scope.t; refs : Ast.Node.t Ast.Node.Map.t }
 
   let empty =
     { current_scope = Scope.empty; refs = Map.empty (module Ast.Node) }
+
+  let deref (data : t) node = Map.find data.refs node
 end
 
-let rec run (data : Names.t) node =
+let rec run (data : Names.t) node : Names.t =
   let e, _ = node in
   match e with
-  | Ast.Var { name; _ } -> (
-      match Scope.find ~name data.current_scope with
-      | None ->
-          Stdio.printf "name not found: %s\n" name;
-          data
-      | Some expr ->
-          Stdio.printf "found name: %s\n" name;
-          { data with refs = Map.add_exn ~key:node ~data:expr data.refs } )
-  | Ast.Module { name = _; lines } -> List.fold ~init:data ~f:run lines
-  | Ast.Tuple lines | Ast.List lines | Ast.Block lines ->
-      List.fold ~init:data ~f:run lines
+  | Ast.Var { name; _ } ->
+      let reference = Scope.find ~name data.current_scope in
+      let reference = Option.value_exn ~message:name reference in
+      { data with refs = Map.add_exn data.refs ~key:node ~data:reference }
+  | Ast.Extern { name; _ } ->
+      let scope = Scope.add name node data.current_scope in
+      { data with current_scope = scope }
   | Ast.Func { name; params; body; _ } ->
       let outer_scope = Scope.add name node data.current_scope in
       let inner_scope = Scope.nest data.current_scope in
@@ -48,22 +54,11 @@ let rec run (data : Names.t) node =
       let data = List.fold params ~init:data ~f:run in
       let data = run data body in
       { data with current_scope = outer_scope }
-  | Ast.Extern { name; _ } ->
-      let scope = Scope.add name node data.current_scope in
-      { data with current_scope = scope }
   | Ast.Let (var, value) ->
       let data = run data value in
       let scope = Scope.add var.name node data.current_scope in
       { data with current_scope = scope }
-  | Ast.Call { callee; args } ->
-      let data = run data callee in
-      let data = List.fold args ~init:data ~f:run in
-      data
-  | Ast.FloatLiteral _ | Ast.IntLiteral _ | Ast.StringLiteral _ -> data
-  | Ast.Return v -> run data v
-  | _ ->
-      Stdio.printf "unknown name handle %s\n" @@ Ast.nodeName e;
-      data
+  | _ -> Ast.fold ~init:data ~f:run node
 
 let show n =
   Map.iteri n.Names.refs ~f:(fun ~key ~data ->
@@ -71,5 +66,13 @@ let show n =
         (Ast.nodeName (fst data)))
 
 let resolve e =
-  let x = run Names.empty e in
+  let global_scope =
+    let open Ast in
+    let open Builtins in
+    Scope.empty
+    |> Scope.add "+" (mm @@ Builtin ADD)
+    |> Scope.add "-" (mm @@ Builtin SUB)
+    |> Scope.add "=" (mm @@ Builtin EQ)
+  in
+  let x = run { Names.empty with current_scope = global_scope } e in
   x

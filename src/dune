@@ -2,9 +2,9 @@
  (name coral)
  (modules import_resolution name_resolution init_func llvm_backend)
  (libraries coral_core coral_frontend str ctypes ctypes.foreign llvm
-   llvm.analysis llvm.passmgr_builder llvm.executionengine)
+   llvm.analysis llvm.passmgr_builder llvm.executionengine ppx_let)
  (preprocess
-  (pps ppx_inline_test)))
+  (pps ppx_let ppx_inline_test)))
 
 (executable
  (name main)

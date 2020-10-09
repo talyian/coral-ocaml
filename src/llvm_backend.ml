@@ -1,17 +1,18 @@
 open Coral_core
 open Base
+module Names = Name_resolution.Names
 
 type compileContext = {
   context : Llvm.llcontext;
   llmodule : Llvm.llmodule;
   main_func : Llvm.llvalue option;
-  main_builder: Llvm.llbuilder;
+  main_builder : Llvm.llbuilder;
   ns : Name_resolution.Names.t;
   llvals : (Ast.node, Llvm.llvalue, Ast.Node.comparator_witness) Map.t;
 }
 
 type func_compile_ctx = {
-  parent: compileContext;
+  parent : compileContext;
   current_func : Llvm.llvalue;
   builder : Llvm.llbuilder;
 }
@@ -56,7 +57,7 @@ let memoize e (data, llval) =
 (* This builds any "simple" expressions that can exist at either the module
    level (in a value initializer without requiring generating any code in the
    .init) or function level *)
-let rec codegen_at_any_level (data : compileContext) expr =
+let codegen_at_any_level (data : compileContext) expr =
   match expr with
   | Ast.StringLiteral s ->
       (* let str = Llvm.const_stringz data.context s in *)
@@ -71,39 +72,68 @@ let rec codegen_at_any_level (data : compileContext) expr =
 let rec _codegen_func (fctx : func_compile_ctx) node =
   let expr, _ = node in
   Stdio.printf "   [codegen-func: %s]\n" (Ast.nodeName @@ fst node);
-  Stdlib.flush_all();
+  Stdlib.flush_all ();
   match expr with
   | Ast.Block xs ->
-      let fctx, _ll_items =
-        List.fold_map ~init:fctx ~f:codegen_at_func_level xs
-      in
+      let fctx, _ll_items = List.fold_map ~init:fctx ~f:func_codegen xs in
       (fctx, Llvm.const_int (Llvm.i1_type fctx.parent.context) 0)
-  | Ast.Call { callee; args } ->
-      let data, ll_args =
-        List.fold_map ~init:fctx ~f:codegen_at_func_level args
-      in
-      let data, ll_callee = codegen_at_func_level data callee in
-      (data, Llvm.build_call ll_callee (Array.of_list ll_args) "" fctx.builder)
-  | Ast.Var _ ->
-      let reference = Map.find fctx.parent.ns.refs node in
-      (match reference with
-      | None -> failwith @@ "invalid reference: " ^ Ast.show_node node
-      | Some e -> codegen_at_func_level fctx e
+  | Ast.Binop { callee; args } | Ast.Call { callee; args } -> (
+      (* hmmm. Either we can turn the returntype into a custom type LlValue | BuiltinOp | Lltype
+         or we could have some other pass that rewrites anything resolving to a builtin to
+         something pattern-matchable. For now, I guess the LLVM pass can be smart, but at some point
+         we may have a dumber backend that requires prior analysis
+      *)
+      match Names.deref fctx.parent.ns callee with
+      | Some (Ast.Builtin Builtins.EQ, _) ->
+          let fctx, [ lhs; rhs ] =
+            List.fold_map ~init:fctx ~f:func_codegen args
+          in
+          (fctx, Llvm.build_icmp Llvm.Icmp.Eq lhs rhs "" fctx.builder)
+      | Some (Ast.Builtin Builtins.ADD, _) ->
+          let fctx, [ lhs; rhs ] =
+            List.fold_map ~init:fctx ~f:func_codegen args
+          in
+          (fctx, Llvm.build_add lhs rhs "" fctx.builder)
+      | _ ->
+          let fctx, ll_callee = func_codegen fctx callee in
+          let fctx, ll_args = List.fold_map ~init:fctx ~f:func_codegen args in
+          ( fctx,
+            Llvm.build_call ll_callee (Array.of_list ll_args) "" fctx.builder )
       )
+  | Ast.Var _ -> (
+      let reference = Names.deref fctx.parent.ns node in
+      match reference with
+      | None -> failwith @@ "invalid reference: " ^ Ast.show_node node
+      | Some e -> func_codegen fctx e )
   | Ast.Func _ ->
-    let new_parent, lval = _codegen_at_module_level fctx.parent node in
-    {fctx with parent=new_parent}, lval
-  | Ast.Return value ->
-    let fctx, llval = codegen_at_func_level fctx value in
-    ( match Llvm.classify_type @@ Llvm.type_of llval  with
-      | Llvm.TypeKind.Void  -> fctx, Llvm.build_ret_void fctx.builder
-      | _ -> fctx, Llvm.build_ret llval fctx.builder)
-  | Ast.Tuple [] ->
-    fctx, Llvm.undef @@ Llvm.void_type fctx.parent.context
+      let new_parent, lval = _mod_codegen fctx.parent node in
+      ({ fctx with parent = new_parent }, lval)
+  | Ast.Return value -> (
+      let fctx, llval = func_codegen fctx value in
+      match Llvm.classify_type @@ Llvm.type_of llval with
+      | Llvm.TypeKind.Void -> (fctx, Llvm.build_ret_void fctx.builder)
+      | _ -> (fctx, Llvm.build_ret llval fctx.builder) )
+  | Ast.If (cond, b1, b2) ->
+      let fctx, llcond = func_codegen fctx cond in
+      let llcx = fctx.parent.context in
+      let llblock1 = Llvm.append_block llcx "b1" fctx.current_func in
+      let llblock2 = Llvm.append_block llcx "b2" fctx.current_func in
+      let llblock3 = Llvm.append_block llcx "b3" fctx.current_func in
+      let br = Llvm.build_cond_br llcond llblock1 llblock2 fctx.builder in
+      Llvm.position_at_end llblock1 fctx.builder;
+      let fctx, _ = func_codegen fctx b1 in
+      let _ = Llvm.build_br llblock3 fctx.builder in
+      Llvm.position_at_end llblock2 fctx.builder;
+      let fctx, _ = func_codegen fctx b2 in
+      let _ = Llvm.build_br llblock3 fctx.builder in
+      Llvm.position_at_end llblock3 fctx.builder;
+      (fctx, br)
+  | Ast.Tuple [] -> (fctx, Llvm.undef @@ Llvm.void_type fctx.parent.context)
   | Ast.Tuple items ->
-    let fctx, llitems = List.fold_map ~init:fctx ~f:codegen_at_func_level items in
-    fctx, Llvm.const_struct fctx.parent.context (Array.of_list llitems)
-  | StringLiteral _ | IntLiteral _ -> fctx, snd @@ codegen_at_any_level fctx.parent expr
+      let fctx, llitems = List.fold_map ~init:fctx ~f:func_codegen items in
+      (fctx, Llvm.const_struct fctx.parent.context (Array.of_list llitems))
+  | StringLiteral _ | IntLiteral _ ->
+      (fctx, snd @@ codegen_at_any_level fctx.parent expr)
   | expr ->
       Stdio.printf "Func-Codegen: %s\n" @@ Ast.nodeName expr;
       Stdio.print_endline @@ Ast.show_node_data expr;
@@ -111,21 +141,28 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
 
 and memoizef f data expr =
   match Base.Map.find data.llvals expr with
-  | Some x -> data, x
+  | Some x -> (data, x)
   | None ->
-    let data, result = f data expr in
-    memoize expr (data, result)
+      let data, result = f data expr in
+      memoize expr (data, result)
 
-and codegen_at_func_level (data:func_compile_ctx) expr =
+and func_codegen (data : func_compile_ctx) expr =
   match Base.Map.find data.parent.llvals expr with
-  | Some x -> data, x
+  | Some x -> (data, x)
   | None ->
-    let data, result = _codegen_func data expr in
-    let p = {data.parent with llvals = Map.add_exn ~key:expr ~data:result data.parent.llvals } in
-    let data = {data with parent = p} in
-    (data, result)
-and codegen_at_module_level data expr = memoizef _codegen_at_module_level data expr
-and _codegen_at_module_level (data : compileContext) node =
+      let data, result = _codegen_func data expr in
+      let p =
+        {
+          data.parent with
+          llvals = Map.add_exn ~key:expr ~data:result data.parent.llvals;
+        }
+      in
+      let data = { data with parent = p } in
+      (data, result)
+
+and mod_codegen data expr = memoizef _mod_codegen data expr
+
+and _mod_codegen (data : compileContext) node =
   let open Ast in
   let expr, _ = node in
   match expr with
@@ -136,12 +173,12 @@ and _codegen_at_module_level (data : compileContext) node =
       in
       (data, func)
   | Let (_, bar) ->
-      let data, ll_bar = codegen_at_module_level data bar in
-       (data, ll_bar)
+      let data, ll_bar = mod_codegen data bar in
+      (data, ll_bar)
   | Func { name; ret_type; params; body } ->
-    (* let data, ll_params = List.fold_map ~init:data ~f:codegen_at_module_level params in *)
+      (* let data, ll_params = List.fold_map ~init:data ~f:mod_codegen params in *)
       let ret_type =
-        match ret_type with Some s -> s | None -> Coral_core.Type.Name "Void"
+        Option.value ~default:(Coral_core.Type.Name "Void") ret_type
       in
       ignore params;
       let ll_params = [||] in
@@ -152,12 +189,12 @@ and _codegen_at_module_level (data : compileContext) node =
         Llvm.position_at_end (Llvm.entry_block ll_func) data.main_builder;
       let builder = Llvm.builder data.context in
       Llvm.position_at_end (Llvm.entry_block ll_func) builder;
-      let fctx = {parent=data; current_func = ll_func; builder} in
-      let fctx, _ = codegen_at_func_level fctx body in
+      let fctx = { parent = data; current_func = ll_func; builder } in
+      let fctx, _ = func_codegen fctx body in
       (fctx.parent, ll_func)
   | expr ->
       Stdio.printf "Codegen: %s\n" @@ Ast.nodeName expr;
-      Ast.recurse_unit (fun e -> codegen_at_module_level data e |> ignore) node;
+      Ast.iter (fun e -> mod_codegen data e |> ignore) node;
       Stdlib.flush_all ();
       (data, Llvm.const_int (Llvm.i1_type data.context) 0)
 
@@ -182,7 +219,7 @@ let print_ir (ns : Name_resolution.Names.t) expr =
   in
 
   Stdio.printf "\n\n";
-  List.fold_map ~init:data ~f:codegen_at_module_level lines |> ignore;
+  List.fold_map ~init:data ~f:mod_codegen lines |> ignore;
   Llvm.dump_module llmodule;
 
   (* TODO: we're generating untyped operations with implicit casts *)

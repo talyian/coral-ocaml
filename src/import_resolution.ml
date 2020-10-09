@@ -41,4 +41,4 @@ let rec resolve expr =
       (* find filename relative to system import-root *)
       (* find filename relative to project root. if importing module is a script, project root is its parent folder *)
       ()
-  | _ -> Ast.recurse_unit resolve expr
+  | _ -> Ast.iter resolve expr

@@ -62,6 +62,7 @@ type node_data =
   | TupleDef of node tupleInfo
   | Member of node memberInfo
   | Return of node
+  | Builtin of Builtins.t
   | Empty
 [@@deriving show, sexp_of]
 
@@ -105,6 +106,7 @@ let nodeName = function
   | TupleDef _ -> "TupleDef"
   | List _ -> "List"
   | CharLiteral _ -> "CharLiteral"
+  | Builtin _ -> "Builtin"
 
 let mm foo = (foo, Info.create ())
 
@@ -124,30 +126,31 @@ module Make = struct
   let extern binding name typ = mm @@ Extern { binding; name; typ }
 end
 
-let recurse_unit (f : node -> unit) e =
-  match fst e with
-  | Module m -> List.iter ~f m.lines
-  | Extern _ -> ()
-  | Binop { callee; args; _ } | Call { callee; args; _ } ->
-      f callee;
-      List.iter ~f args
-  | Tuple xs -> List.iter ~f xs
-  | Let (_, b) -> f b
-  | List xs -> List.iter ~f xs
-  | Member { base; _ } -> f base
-  | Block xs -> List.iter ~f xs
-  | If (cond, ifbody, elsebody) ->
-      f cond;
-      f ifbody;
-      f elsebody
-  | Set (_, value) -> f value
-  | Return v -> f v
-  | TupleDef _ -> ()
-  | Func { name = _; ret_type = _; params; body } ->
-      List.iter ~f params;
-      f body
-  | Var _ | IntLiteral _ | FloatLiteral _ | CharLiteral _ | StringLiteral _
-  | Comment _ | Empty | Import _ ->
-      ()
+let fold ~init ~f (node : node) =
+  let e, _ = node in
+  match e with
+  | Module { lines; _ } -> List.fold ~init ~f lines
+  | Block lines -> List.fold ~init ~f lines
+  | Tuple lines -> List.fold ~init ~f lines
+  | List lines -> List.fold ~init ~f lines
+  | Binop { callee; args } | Call { callee; args } ->
+      let init = f init callee in
+      List.fold ~init ~f args
+  | Func { params; body; _ } ->
+      let init = List.fold ~init ~f params in
+      f init body
+  | If (a, b, c) ->
+      let init = f init a in
+      let init = f init b in
+      f init c
+  | Let (_, v) -> f init v
+  | Set (_, v) -> f init v
+  | Member { base = v; _ } -> f init v
+  | Return v -> f init v
+  | CharLiteral _ | StringLiteral _ | IntLiteral _ | FloatLiteral _ | Comment _
+  | Import _ | Extern _ | Builtin _ | Var _ ->
+      init
+  | TupleDef _ -> init
+  | Empty -> init
 
-(* | _ -> print_endline @@ nodeName e *)
+let iter (f : node -> unit) e = fold ~init:() ~f:(fun () -> f) e
