@@ -61,9 +61,9 @@ terminated_line
 | ifexpr { $1 }
 | type_definition NEWLINE { $1 }
                     ;
-func_name
-: IDENTIFIER { $1 }
-| IDENTIFIER LBRACKET typedef RBRACKET { $1 }
+/* func_name */
+/* : IDENTIFIER { $1 } */
+/* | IDENTIFIER LBRACKET typedef RBRACKET { $1 } */
 
 (* path_segment represents a type or module name *)
 path_name
@@ -81,8 +81,12 @@ func_declaration
 
 ifexpr
     : IF cond=binary_op_expr ifbody=block_or_line NEWLINE
-    elifexpr*
-elsebody=elseexpr? {mm @@ If(cond, ifbody, Option.value elsebody ~default:(mm @@ Empty)) }
+    elif=elifexpr*
+    elsebody=elseexpr? {
+    let elsebody = match elsebody with
+      | Some e -> e
+      | None -> mm @@ Empty in
+    Make.ifNode cond ifbody elif elsebody}
 elifexpr
     : ELIF cond=binary_op_expr body=block_or_line NEWLINE { (cond, body) }
 elseexpr
@@ -157,10 +161,12 @@ exprlist
     : e=expr { [e] }
     | x=exprlist COMMA e=expr { x@[e] }
 
-paramlist : separated_list(COMMA, param) { $1 }
+paramlist
+    : separated_list(COMMA, param) {List.mapi (fun i (name, typ) -> mm @@ Param {idx=i; name; typ}) $1}
+
 param
-    : IDENTIFIER COLON typedef { mm @@ Empty }
-    | IDENTIFIER { mm @@ Empty }
+    : IDENTIFIER COLON typedef { ($1, Some $3) }
+    | IDENTIFIER { ($1, None) }
 
 member
     : base=expr_atom DOT member=IDENTIFIER

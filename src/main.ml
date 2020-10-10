@@ -1,4 +1,3 @@
-open Coral_core
 open Coral_frontend
 open Base
 

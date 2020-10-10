@@ -45,6 +45,7 @@ type node_data =
       params : node list;
       body : node;
     }
+  | Param of { idx: int; name : string; typ : node coraltype option }
   | Comment of string
   | Binop of { callee : node; args : node list }
   | Call of { callee : node; args : node list }
@@ -107,6 +108,7 @@ let nodeName = function
   | List _ -> "List"
   | CharLiteral _ -> "CharLiteral"
   | Builtin _ -> "Builtin"
+  | Param _ -> "Param"
 
 let mm foo = (foo, Info.create ())
 
@@ -124,6 +126,13 @@ module Make = struct
   let moduleNode lines = mm @@ Module { name = "module"; lines }
 
   let extern binding name typ = mm @@ Extern { binding; name; typ }
+
+  let rec ifNode cond ifbody elifs elsebody =
+    match elifs with
+    | [] ->
+      mm @@ If (cond, ifbody, elsebody)
+    | (elcond, elbody) :: elif_rest ->
+      mm @@ If (cond, ifbody, ifNode elcond elbody elif_rest elsebody)
 end
 
 let fold ~init ~f (node : node) =
@@ -152,5 +161,6 @@ let fold ~init ~f (node : node) =
       init
   | TupleDef _ -> init
   | Empty -> init
+  | Param _ -> init
 
 let iter (f : node -> unit) e = fold ~init:() ~f:(fun () -> f) e

@@ -15,6 +15,8 @@ type func_compile_ctx = {
   parent : compileContext;
   current_func : Llvm.llvalue;
   builder : Llvm.llbuilder;
+  terminated: bool;
+
 }
 
 module Lltype = struct
@@ -43,6 +45,10 @@ module Lltype = struct
         | _ ->
             Llvm.function_type ll_ret_type
               (Array.of_list @@ List.map ~f:(of_type data) params) )
+    | Name "Int8" -> Llvm.i8_type data.context
+    | Name "Int16" -> Llvm.i16_type data.context
+    | Name "Int32" -> Llvm.i32_type data.context
+    | Name "Int64" -> Llvm.i64_type data.context
     | Name "Void" -> Llvm.void_type data.context
     | Name "Str" -> Llvm.pointer_type @@ Llvm.i8_type data.context
     | typ -> failwith (Coral_core.Type.show Ast.pp_node typ)
@@ -50,7 +56,7 @@ end
 
 let memoize e (data, llval) =
   let data =
-    { data with llvals = Map.add_exn ~key:e ~data:llval data.llvals }
+    { data with llvals = Map.set ~key:e ~data:llval data.llvals }
   in
   (data, llval)
 
@@ -71,8 +77,8 @@ let codegen_at_any_level (data : compileContext) expr =
    and construct llvm instructions for every node type *)
 let rec _codegen_func (fctx : func_compile_ctx) node =
   let expr, _ = node in
-  Stdio.printf "   [codegen-func: %s]\n" (Ast.nodeName @@ fst node);
-  Stdlib.flush_all ();
+  (* Stdio.printf "   [codegen-func: %s]\n" (Ast.nodeName @@ fst node);
+   * Stdlib.flush_all (); *)
   match expr with
   | Ast.Block xs ->
       let fctx, _ll_items = List.fold_map ~init:fctx ~f:func_codegen xs in
@@ -85,15 +91,34 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
       *)
       match Names.deref fctx.parent.ns callee with
       | Some (Ast.Builtin Builtins.EQ, _) ->
-          let fctx, [ lhs; rhs ] =
-            List.fold_map ~init:fctx ~f:func_codegen args
-          in
-          (fctx, Llvm.build_icmp Llvm.Icmp.Eq lhs rhs "" fctx.builder)
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_icmp Llvm.Icmp.Eq lhs rhs "" fctx.builder
+         | _ -> failwith "bad eq arguments")
+      | Some (Ast.Builtin Builtins.LT, _) ->
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_icmp Llvm.Icmp.Slt lhs rhs "" fctx.builder
+         | _ -> failwith "bad eq arguments")
+
       | Some (Ast.Builtin Builtins.ADD, _) ->
-          let fctx, [ lhs; rhs ] =
-            List.fold_map ~init:fctx ~f:func_codegen args
-          in
-          (fctx, Llvm.build_add lhs rhs "" fctx.builder)
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_add lhs rhs "" fctx.builder
+         | _ -> failwith "bad add arguments")
+      | Some (Ast.Builtin Builtins.SUB, _) ->
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_sub lhs rhs "" fctx.builder
+         | _ -> failwith "bad add arguments")
+      | Some (Ast.Builtin Builtins.MUL, _) ->
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_mul lhs rhs "" fctx.builder
+         | _ -> failwith "bad add arguments")
+      | Some (Ast.Builtin Builtins.DIV, _) ->
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_sdiv lhs rhs "" fctx.builder
+         | _ -> failwith "bad add arguments")
+      | Some (Ast.Builtin Builtins.MOD, _) ->
+        (match List.fold_map ~init:fctx ~f:func_codegen args with
+         | fctx, [ lhs; rhs ] -> fctx, Llvm.build_srem lhs rhs "" fctx.builder
+         | _ -> failwith "bad add arguments")
       | _ ->
           let fctx, ll_callee = func_codegen fctx callee in
           let fctx, ll_args = List.fold_map ~init:fctx ~f:func_codegen args in
@@ -110,10 +135,13 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
       ({ fctx with parent = new_parent }, lval)
   | Ast.Return value -> (
       let fctx, llval = func_codegen fctx value in
+      let fctx = {fctx with terminated = true} in
       match Llvm.classify_type @@ Llvm.type_of llval with
       | Llvm.TypeKind.Void -> (fctx, Llvm.build_ret_void fctx.builder)
       | _ -> (fctx, Llvm.build_ret llval fctx.builder) )
   | Ast.If (cond, b1, b2) ->
+      (* TODO: this termination analysis needs to happen in a previous pass,
+         Because if we know both sides are terminated, then we don't have to generate block3 *)
       let fctx, llcond = func_codegen fctx cond in
       let llcx = fctx.parent.context in
       let llblock1 = Llvm.append_block llcx "b1" fctx.current_func in
@@ -121,12 +149,17 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
       let llblock3 = Llvm.append_block llcx "b3" fctx.current_func in
       let br = Llvm.build_cond_br llcond llblock1 llblock2 fctx.builder in
       Llvm.position_at_end llblock1 fctx.builder;
-      let fctx, _ = func_codegen fctx b1 in
-      let _ = Llvm.build_br llblock3 fctx.builder in
+      let fctx, _ = func_codegen {fctx with terminated = false} b1 in
+      let is_terminated_1 = fctx.terminated in
+      if not is_terminated_1 then ignore (Llvm.build_br llblock3 fctx.builder);
       Llvm.position_at_end llblock2 fctx.builder;
-      let fctx, _ = func_codegen fctx b2 in
-      let _ = Llvm.build_br llblock3 fctx.builder in
-      Llvm.position_at_end llblock3 fctx.builder;
+      let fctx, _ = func_codegen {fctx with terminated = false} b2 in
+      let is_terminated_2 = fctx.terminated in
+      if not is_terminated_2 then ignore (Llvm.build_br llblock3 fctx.builder);
+      if is_terminated_1 && is_terminated_2 then
+        Llvm.remove_block llblock3
+      else
+        Llvm.position_at_end llblock3 fctx.builder;
       (fctx, br)
   | Ast.Tuple [] -> (fctx, Llvm.undef @@ Llvm.void_type fctx.parent.context)
   | Ast.Tuple items ->
@@ -154,11 +187,16 @@ and func_codegen (data : func_compile_ctx) expr =
       let p =
         {
           data.parent with
-          llvals = Map.add_exn ~key:expr ~data:result data.parent.llvals;
+          llvals = Map.set ~key:expr ~data:result data.parent.llvals;
         }
       in
       let data = { data with parent = p } in
       (data, result)
+
+and param_codegen ll_func data node =
+  match fst node with
+  | Ast.Param {idx; _} -> memoize node (data, Llvm.param ll_func idx)
+  | _ -> failwith "expected parameter"
 
 and mod_codegen data expr = memoizef _mod_codegen data expr
 
@@ -176,24 +214,35 @@ and _mod_codegen (data : compileContext) node =
       let data, ll_bar = mod_codegen data bar in
       (data, ll_bar)
   | Func { name; ret_type; params; body } ->
-      (* let data, ll_params = List.fold_map ~init:data ~f:mod_codegen params in *)
+    Stdio.printf "func = %s\n" name;
+    Stdlib.flush_all();
+    (* TODO: need type analysis to get types of params *)
+      let ptype data param =
+        match fst param with
+        | Param { typ=Some t; _ } -> data, Lltype.of_type data t
+        | _ -> failwith "ptype" in
+      let data, ll_ptype = List.fold_map ~init:data ~f:ptype params in
+      let ll_ptype = Array.of_list ll_ptype in
+
       let ret_type =
         Option.value ~default:(Coral_core.Type.Name "Void") ret_type
       in
-      ignore params;
-      let ll_params = [||] in
       let ll_ret_type = Lltype.of_type data ret_type in
-      let ll_func_type = Llvm.function_type ll_ret_type ll_params in
+      let ll_func_type = Llvm.function_type ll_ret_type ll_ptype in
       let ll_func = Llvm.define_function name ll_func_type data.llmodule in
+      (* Recursion : The ll_func value must be visible inside the body
+       * so it must be added to data.llvals. *)
+      let data = {data with llvals = Map.set ~key:node ~data:ll_func data.llvals} in
+      let data, _ = List.fold_map ~init:data ~f:(param_codegen ll_func) params in
       if String.equal name ".init" then
         Llvm.position_at_end (Llvm.entry_block ll_func) data.main_builder;
       let builder = Llvm.builder data.context in
       Llvm.position_at_end (Llvm.entry_block ll_func) builder;
-      let fctx = { parent = data; current_func = ll_func; builder } in
+      let fctx = { parent = data; current_func = ll_func; builder; terminated = false } in
       let fctx, _ = func_codegen fctx body in
       (fctx.parent, ll_func)
   | expr ->
-      Stdio.printf "Codegen: %s\n" @@ Ast.nodeName expr;
+      Stdio.printf "module-codegen: %s\n" @@ Ast.nodeName expr;
       Ast.iter (fun e -> mod_codegen data e |> ignore) node;
       Stdlib.flush_all ();
       (data, Llvm.const_int (Llvm.i1_type data.context) 0)

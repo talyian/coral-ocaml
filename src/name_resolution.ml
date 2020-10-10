@@ -49,13 +49,17 @@ let rec run (data : Names.t) node : Names.t =
       { data with current_scope = scope }
   | Ast.Func { name; params; body; _ } ->
       let outer_scope = Scope.add name node data.current_scope in
-      let inner_scope = Scope.nest data.current_scope in
+      let inner_scope = Scope.nest outer_scope in
       let data = { data with current_scope = inner_scope } in
       let data = List.fold params ~init:data ~f:run in
       let data = run data body in
       { data with current_scope = outer_scope }
+  | Ast.Param {name; _} ->
+      {data with current_scope = Scope.add name node data.current_scope}
   | Ast.Let (var, value) ->
-      let data = run data value in
+      let outer_scope = data.current_scope in
+      let data = run {data with current_scope = Scope.nest data.current_scope} value in
+      let data = {data with current_scope = outer_scope} in
       let scope = Scope.add var.name node data.current_scope in
       { data with current_scope = scope }
   | _ -> Ast.fold ~init:data ~f:run node
@@ -72,7 +76,15 @@ let resolve e =
     Scope.empty
     |> Scope.add "+" (mm @@ Builtin ADD)
     |> Scope.add "-" (mm @@ Builtin SUB)
+    |> Scope.add "*" (mm @@ Builtin MUL)
+    |> Scope.add "/" (mm @@ Builtin DIV)
+    |> Scope.add "%" (mm @@ Builtin MOD)
     |> Scope.add "=" (mm @@ Builtin EQ)
+    |> Scope.add "!=" (mm @@ Builtin NEQ)
+    |> Scope.add "<" (mm @@ Builtin LT)
+    |> Scope.add ">" (mm @@ Builtin GT)
+    |> Scope.add "<=" (mm @@ Builtin LTE)
+    |> Scope.add ">=" (mm @@ Builtin GTE)
   in
   let x = run { Names.empty with current_scope = global_scope } e in
   x

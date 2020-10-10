@@ -11,12 +11,32 @@ let cprintf = extern("c", "printf", Func[][Str, ...])
 func foobar():
   return cprintf("Hello, %s\n", "World")
 
-func fibonacci(n:Int64):
-  if 1 + 1 = 3:
-    cprintf "hi\n"
+foobar ()
+
+func factorial : Int64 (n:Int64):
+  if n < 2:
+    return 1
   else:
-    cprintf "oops\n"
+    return n * factorial(n - 1)
+
+cprintf("%ld! = %ld\n", 5, factorial 5)
+cprintf("%ld! = %ld\n", 6, factorial 6)
+cprintf("%ld! = %ld\n", 7, factorial 7)
+
+func fizzbuzz(n:Int64):
+  func fb(n:Int64):
+    if n % 15 = 0:
+       cprintf "Fizzbuzz "
+    elif n % 5 = 0:
+       cprintf "Buzz "
+    elif n % 3 = 0:
+       cprintf "Fizz "
+    else:
+       cprintf("%ld ", n)
+    return ()
+  if 1 < n:
+     fizzbuzz(n - 1)
+  fb n
   return ()
 
-foobar ()
-fibonacci ()
+fizzbuzz 33
