@@ -8,20 +8,20 @@
 
 let cprintf = extern("c", "printf", Func[][Str, ...])
 
-func foobar():
-  return cprintf("Hello, %s\n", "World")
+# func foobar():
+#   return cprintf("Hello, %s\n", "World")
 
-foobar ()
+# foobar ()
 
-func factorial : Int64 (n:Int64):
-  if n < 2:
-    return 1
-  else:
-    return n * factorial(n - 1)
+# func factorial : Int64 (n:Int64):
+#   if n < 2:
+#     return 1
+#   else:
+#     return n * factorial(n - 1)
 
-cprintf("%ld! = %ld\n", 5, factorial 5)
-cprintf("%ld! = %ld\n", 6, factorial 6)
-cprintf("%ld! = %ld\n", 7, factorial 7)
+# cprintf("%ld! = %ld\n", 5, factorial 5)
+# cprintf("%ld! = %ld\n", 6, factorial 6)
+# cprintf("%ld! = %ld\n", 7, factorial 7)
 
 func fizzbuzz(n:Int64):
   func fb(n:Int64):

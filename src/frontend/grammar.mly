@@ -96,8 +96,8 @@ forexpr
     : FOR LPAREN paramlist RPAREN IN binary_op_expr block_or_line { mm @@ Empty }
 
 block
-    : newlines? lines=lines DEDENT { mm @@ Block(lines) }
-    | newlines? lines=lines_nl DEDENT { mm @@ Block(lines) }
+    : newlines? lines=lines DEDENT { match lines with | [x] -> x | lines -> mm @@ Block(lines) }
+    | newlines? lines=lines_nl DEDENT { match lines with | [x] -> x | lines -> mm @@ Block(lines) }
 block_or_line
     : COLON NEWLINE INDENT e=block { e }
     | COLON e=line { e }

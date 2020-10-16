@@ -84,31 +84,33 @@ module Node = struct
   end
 end
 
-let nodeName = function
+let rec nodeName = function
   | Module _ -> "Module"
-  | Import _ -> "Import"
-  | Extern _ -> "Extern"
-  | Func _ -> "Func"
+  | Import {path;_} -> "Import-" ^ (String.concat ~sep:"." path)
+  | Extern {name;_} -> "Extern-" ^ name
+  | Func {name;_} -> "Func-" ^ name
   | Comment _ -> "Comment"
   | If _ -> "If"
   | IntLiteral _ -> "IntLiteral"
   | FloatLiteral _ -> "FloatLiteral"
   | StringLiteral _ -> "StringLiteral"
-  | Var _ -> "Var"
+  | Var v -> "Var-" ^ v.name
   | Block _ -> "Block"
-  | Call _ -> "Call"
+  | Call {callee=(Var v, _);_ } -> "Call-" ^ v.name
+  | Call {callee;_} -> "Call-" ^ nodeName (fst callee)
   | Tuple _ -> "Tuple"
-  | Return _ -> "Return"
+  | Return x -> "return-" ^ nodeName (fst x)
   | Empty -> "Empty"
-  | Binop _ -> "Binop"
-  | Let _ -> "Let"
-  | Set _ -> "Set"
+  | Binop {callee=(Var v, _);_} -> "Binop-" ^ v.name
+  | Binop {callee;_} -> "Binop-" ^ nodeName(fst callee)
+  | Let (v, _) -> "Let-" ^ v.name
+  | Set (v, _) -> "Set-" ^ v.name
   | Member _ -> "Member"
   | TupleDef _ -> "TupleDef"
   | List _ -> "List"
   | CharLiteral _ -> "CharLiteral"
-  | Builtin _ -> "Builtin"
-  | Param _ -> "Param"
+  | Builtin b -> Builtins.show b
+  | Param {name;_} -> "Param-" ^ name
 
 let mm foo = (foo, Info.create ())
 

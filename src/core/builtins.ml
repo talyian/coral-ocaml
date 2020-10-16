@@ -14,6 +14,7 @@ type t =
   | AND
   | OR
   (* primitive types *)
+  | VOID
   | BOOL
   | INT8
   | INT16
@@ -25,5 +26,6 @@ type t =
   | STR
   | PTR
   | FUNC
+  | VARFUNC
 (* intrinsics *)
-[@@deriving show, sexp_of, compare]
+[@@deriving show, sexp_of, compare, equal]
