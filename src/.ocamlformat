@@ -1,0 +1,3 @@
+margin = 99
+parse-docstrings = false
+wrap-comments = true

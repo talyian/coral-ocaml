@@ -1,6 +1,6 @@
 sudo: enable
 language: ocaml
 install:
-  - docker build -t coral-ocaml .
+  - docker build -t talyian/ocaml-env docker-images/ocaml-env 
 script:
   - docker run --rm coral-ocaml bash -i -c "make test"

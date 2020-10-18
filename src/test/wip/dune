@@ -6,3 +6,8 @@
  (libraries coral coral_frontend)
  (preprocess
   (pps ppx_inline_test)))
+
+(env
+ (dev
+  (flags
+   (:standard -warn-error +8-26-27-33))))

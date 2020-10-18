@@ -1,4 +1,3 @@
-open Coral_core
 open Coral_frontend
 open Base
 
@@ -7,9 +6,9 @@ let check_source_compiles source =
   | Ok e ->
       let e = Coral.Init_func.run e in
       let _imports = Coral.Import_resolution.resolve e in
-      let _ns = Coral.Name_resolution.resolve e in
-      (* let ts = Coral.Type_resolution.resolve e in *)
-      let _ = Coral.Llvm_backend.print_ir _ns e in
+      let ns = Coral.Name_resolution.resolve e in
+      let ts = Coral.Type_resolution_3.resolve ns e in
+      let _ = Coral.Llvm_backend.print_ir ns e in
       (* Stdio.print_endline @@ Ast.show_node e; *)
       true
   | Error e ->
