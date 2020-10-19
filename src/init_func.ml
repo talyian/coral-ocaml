@@ -1,11 +1,10 @@
-(** An AST rewriter that converts module-level statements into an ".init"
-   function.
+(** An AST rewriter that converts module-level statements into an ".init" function.
 
-   We could run this before import/name as a pretty naive pass, but using type
-   information we can also precisely pinpoint which module lines are constexpr
-   globals and which lines need to be mutable globals initialized in .init.
+    We could run this before import/name as a pretty naive pass, but using type information we can
+    also precisely pinpoint which module lines are constexpr globals and which lines need to be
+    mutable globals initialized in .init.
 
-   For now, we can do it the naive way and only support simple constexprs *)
+    For now, we can do it the naive way and only support simple constexprs *)
 
 open Coral_core
 
@@ -14,6 +13,7 @@ type expr_class = Global of Ast.node | Init of Ast.node
 let classify = function
   | (Ast.Extern _, _) as e -> Global e
   | (Ast.Let (_var, _value), _) as e -> Global e
+  | (Ast.Func _, _) as e -> Global e
   | e -> Init e
 
 let run e =
@@ -32,9 +32,7 @@ let run e =
       let main =
         let body =
           Ast.mm
-          @@ Ast.Block
-               (List.rev
-                  ((Ast.mm @@ Ast.Return (Ast.mm @@ Ast.Tuple [])) :: move_lines))
+          @@ Ast.Block (List.rev ((Ast.mm @@ Ast.Return (Ast.mm @@ Ast.Tuple [])) :: move_lines))
         in
         let ret_type = Some (Type.Name "Void") in
         Ast.Make.funcNode (".init", ret_type, [], body)

@@ -33,10 +33,11 @@ end
 
 let rec run (data : Names.t) node : Names.t =
   let e, _ = node in
+  Stdio.printf "NS:run %s\n" (Ast.nodeName e);
   match e with
   | Ast.Var { name; _ } ->
       let reference = Scope.find ~name data.current_scope in
-      let reference = Option.value_exn ~message:name reference in
+      let reference = Option.value_exn ~message:("Name not found: " ^ name) reference in
       { data with refs = Map.add_exn data.refs ~key:node ~data:reference }
   | Ast.Extern { name; _ } ->
       let scope = Scope.add name node data.current_scope in
@@ -81,5 +82,6 @@ let resolve e =
     |> Scope.add "<=" (overload "-" [ LTE_INT; LTE_FLOAT ])
     |> Scope.add ">=" (overload "-" [ GTE_INT; GTE_FLOAT ])
   in
+  Stdio.print_endline @@ Sexp.to_string_hum @@ Ast.Node.sexp_of_t e;
   let x = run { Names.empty with current_scope = global_scope } e in
   x
