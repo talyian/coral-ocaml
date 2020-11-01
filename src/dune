@@ -1,8 +1,9 @@
 (library
  (name coral)
- (modules type_resolution_3 import_resolution name_resolution init_func llvm_backend)
- (libraries coral_core coral_frontend str ctypes ctypes.foreign llvm
-   llvm.analysis llvm.passmgr_builder llvm.executionengine ppx_let)
+ (modules
+   import_resolution name_resolution init_func llvm_backend)
+ (libraries coral_types coral_core coral_frontend str ctypes ctypes.foreign llvm
+            llvm.analysis llvm.passmgr_builder llvm.executionengine ppx_let)
  (preprocess
   (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))
 
@@ -14,7 +15,7 @@
   (names foobar))
  (libraries coral)
  (preprocess
-  (pps ppx_inline_test)))
+  (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))
 
 (env
  (dev

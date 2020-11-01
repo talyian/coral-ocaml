@@ -1,6 +1,7 @@
 (library
  (name test_wip)
  (inline_tests
+  (deps (source_tree ../examples))
   (flags -verbose))
  (modules main)
  (libraries coral coral_frontend)

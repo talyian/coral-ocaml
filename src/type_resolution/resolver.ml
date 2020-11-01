@@ -4,93 +4,7 @@
    ccvalues. What's the difference between an Ast.node and a ccval? ccvals have types *)
 open Coral_core
 open Base
-
-module Cconst = struct
-  type t =
-    | Bool of bool
-    | Int8 of char
-    | Int32 of int32
-    | Int64 of int64
-    | Float64 of float
-    | String of string
-  [@@deriving equal]
-
-  let show = function
-    | Bool b -> Bool.to_string b
-    | Int8 c -> Char.to_string c
-    | Int32 i -> Int32.to_string i
-    | Int64 i -> Int64.to_string i
-    | Float64 f -> Float.to_string f
-    | String s -> "\"" ^ String.escaped s ^ "\""
-end
-
-module Ccval = struct
-  type t =
-    | Error (* this represents a type error, always false *)
-    | Unknown (* this represents a unknown variable, always true *)
-    (* This represents a set of possibilities, of which we accept the first match *)
-    | Overload of t list
-    | Const of Cconst.t
-    | Forall of int * t (* a universal quantifier - introduces a scope for a type variable *)
-    | TypeVar of int
-    (* a free type variable introduced within the scope of a universal quantifier *)
-    | Is of Builtins.t
-    | Appl of t * t list
-    | IsInstance of t
-    | TypeOf of t
-    | Call of t * t list
-    | Tuple of t list
-    | And of t * t
-    | OverloadIndex of int
-  [@@deriving equal]
-
-  (* | Lambda of {
-   *     params: y list;
-   *     openvars: y list;
-   *     body: y
-   *   } *)
-  (* | Block of y list *)
-
-  let rec show v =
-    let cc x = String.concat ~sep:", " @@ List.map ~f:show x in
-    match v with
-    | Error -> "err"
-    | Unknown -> "???"
-    | Const c -> Cconst.show c
-    | Overload o -> Printf.sprintf "ov.{%s}" (cc o)
-    | Forall (x, body) -> Printf.sprintf "∀.%d[%s]" x (show body)
-    | TypeVar x -> Printf.sprintf "τ%d" x
-    | IsInstance (Is Builtins.VOID) -> "()"
-    | Is Builtins.VOID -> "void"
-    | Is b -> Builtins.show b
-    | Appl (x, args) -> Printf.sprintf "%s[%s]" (show x) (cc args)
-    | Call (x, args) -> Printf.sprintf "%s(%s)" (show x) (cc args)
-    | IsInstance x -> "::" ^ show x
-    | TypeOf x -> "@" ^ show x
-    | Tuple x -> "(" ^ cc x ^ ")"
-    | And (a, b) -> show a ^ " && " ^ show b
-    | OverloadIndex i -> "ov." ^ Int.to_string i
-
-  (* | Lambda {params; openvars=_; body} -> Printf.sprintf "λ.%s(%s)" (cc params) (show body) *)
-
-  let type_of = function
-    | Tuple [] -> Is Builtins.VOID
-    | IsInstance x -> x
-    | Const (Cconst.Bool _) -> Is Builtins.BOOL
-    | Const (Cconst.Int8 _) -> Is Builtins.INT8
-    | Const (Cconst.Int32 _) -> Is Builtins.INT32
-    | Const (Cconst.Int64 _) -> Is Builtins.INT64
-    | Const (Cconst.Float64 _) -> Is Builtins.FLOAT64
-    | Const (Cconst.String _) -> Is Builtins.STR
-    | x -> TypeOf x
-
-  let rec is_instance = function
-    | TypeOf x -> x
-    | Tuple ts -> Tuple (List.map ~f:is_instance ts)
-    | x -> IsInstance x
-
-  let make_tuple = function [] -> Is Builtins.VOID | [ x ] -> x | xs -> Tuple xs
-end
+open Types
 
 type ccval = Ccval.t
 
@@ -100,18 +14,54 @@ type cconst = Cconst.t
     relies on Name resolver ) and produces a map of Ast.Node -> ccval for later stages *)
 module Resolver = struct
   type t = {
-    ns : Name_resolution.Names.t;
+    ns : Names.t;
     memo : ccval Ast.Node.Map.t;
     instantiations : ccval Map.M(Int).t;
+    (* For any given call node referencing an overload, stores the index of which overload was
+       resolved *)
     overload_index : int Ast.Node.Map.t;
+    freevars : int;
   }
 
-  let with_mapping (id : int) ccval res = res
+  let create ns =
+    {
+      ns;
+      memo = Map.empty (module Ast.Node);
+      overload_index = Map.empty (module Ast.Node);
+      instantiations = Map.empty (module Int);
+      freevars = 0;
+    }
+
+  (* A child can reference elements from the parent but not vice versa *)
+  let create_child parent =
+    let x = create parent.ns in
+    { x with freevars = parent.freevars + 100 }
+
+  let dump resolver =
+    Map.iteri resolver.memo ~f:(fun ~key ~data ->
+        Stdio.printf "      [%20s] => %s\n" (Ast.nodeName (fst key)) (Ccval.show data))
+
+  let with_mapping (_id : int) _ccval res = res
 
   let with_overload node idx res =
     { res with overload_index = Map.set ~key:node ~data:idx res.overload_index }
 
+  (** Adds a type value for a given Ast node *)
   let add node data resolver = { resolver with memo = Map.set ~key:node ~data resolver.memo }
+
+  (** Adds a free type term for a given Ast node *)
+  let add_free node resolver =
+    let i = resolver.freevars in
+    let resolver =
+      { resolver with memo = Map.set ~key:node ~data:(Freevar i) resolver.memo; freevars = i + 1 }
+    in
+    (resolver, Ccval.Freevar i)
+
+  (** recursively replaces all occurrences of a type value with another *)
+  let subst ~key ~repl resolver =
+    let memo = resolver.memo in
+    let memo = Map.map ~f:(Ccval.subst ~key ~repl) memo in
+    { resolver with memo }
 end
 
 type resolver = Resolver.t
@@ -140,25 +90,35 @@ type resolver = Resolver.t
 
 let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
   let open Ccval in
-  (* Stdio.printf "resolve_call %s\n" (Ccval.show callee); *)
+  Stdio.printf "resolve_call %s\n" (Ccval.show callee);
   match callee with
   | IsInstance (Appl (Appl (Is Builtins.VARFUNC, ret), _)) ->
-      (resolver, is_instance @@ make_tuple ret)
+      (resolver, is_instance @@ make_tuple_from_return ret)
   | IsInstance (Appl (Appl (Is Builtins.FUNC, ret), params)) ->
-      List.iter2_exn params args ~f:(fun param arg ->
-          let ptype = param in
-          let atype = Ccval.type_of arg in
-          if Ccval.equal ptype atype then ()
-          else (
-            Stdlib.flush_all ();
-            failwith
-            @@ Printf.sprintf "value mismatch %s <-> %s" (Ccval.show ptype) (Ccval.show atype) ));
-      (resolver, is_instance @@ make_tuple ret)
+      let resolver =
+        List.fold2_exn ~init:resolver
+          ~f:(fun resolver param arg ->
+            let param_type = param in
+            let arg_type = Ccval.type_of arg in
+            if Ccval.equal param_type arg_type then resolver
+            else
+              match (param_type, arg_type) with
+              | ptype, Freevar i ->
+                  Stdio.printf "instantiating free variable %d with %s\n" i (Ccval.show param);
+                  Resolver.subst ~key:arg_type ~repl:ptype resolver
+              | _ ->
+                  Stdio.printf "value mismatch %s <-> %s" (Ccval.show param) (Ccval.show arg);
+                  failwith "value mismatch")
+          params args
+      in
+      (resolver, is_instance @@ make_tuple_from_return ret)
   | Overload items ->
       (* When calling an overload set, try all the cases until one fits *)
       (* tag the call expr with the overload index as well *)
       let rec resolve_overload res i = function
-        | [] -> (res, Unknown) (* no overload matched *)
+        | [] ->
+            Stdio.printf "Overload resolution failed for %s\n" (Ast.show_node call);
+            (res, Unknown) (* no overload matched *)
         | x :: xs -> (
             match resolve_call res call x args with
             | exception _ -> resolve_overload res (i + 1) xs
@@ -167,9 +127,10 @@ let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
                 (res, ret_val) )
       in
       resolve_overload resolver 0 items
-  | IsInstance (Forall (_t, Appl (Appl (Is Builtins.FUNC, ret), params))) ->
+  | IsInstance (Forall (_t, Appl (Appl (Is Builtins.FUNC, _ret), params))) ->
       (* if a call is to a universally quantified type, we need to unify it against the arguments.
          We need to instantiate the quantified variable *)
+      Stdio.printf "unk\n";
       let tvar = Ccval.Unknown in
       let resolver = Resolver.with_mapping _t tvar resolver in
       let resolver =
@@ -183,6 +144,7 @@ let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
       in
       (* let env = Environment.(empty |> add_var _t) in *)
       (* let env, out = Environment.unify_call env params args ret in *)
+      Stdio.printf "unk\n";
       let out = Ccval.Unknown in
       (resolver, out)
   | _ ->
@@ -220,14 +182,26 @@ let rec resolve_type resolver typ =
 let rec _resolve resolver node =
   let open Ccval in
   match fst node with
-  | Ast.Func { params; body; _ } ->
+  | Ast.Func { params; body; name; _ } ->
       (* TODO: we really should be doing something particular with return x instead of just
          evaluating it the same as x *)
+      Stdio.printf "resolving function: %s\n" name;
+
+      let resolver = Resolver.create_child resolver in
       let resolver, ccparams = List.fold_map ~init:resolver ~f:resolve params in
       let ccparams = List.map ~f:Ccval.type_of ccparams in
-      (* to break infinite recursion, we need to add a term here *)
-      let resolver = Resolver.add node Unknown resolver in
+
+      let freevars_begin = resolver.Resolver.freevars in
+      (* To break infinite recursion, we need to add a term here *)
+      let resolver, _ = Resolver.add_free node resolver in
       let resolver, ccbody = resolve resolver body in
+      if resolver.Resolver.freevars <> freevars_begin then
+        Stdio.printf "function call produced free variables: %s\n" name
+      else Stdio.printf "function call: %s (%d free vars)\n" name freevars_begin;
+      Stdio.printf "------------------------------\n";
+      Resolver.dump resolver;
+
+      Stdlib.flush_all ();
       (resolver, IsInstance (Appl (Appl (Is Builtins.FUNC, [ Ccval.type_of ccbody ]), ccparams)))
   | Ast.Block lines ->
       let resolver, cclines = List.fold_map ~init:resolver ~f:resolve lines in
@@ -236,9 +210,11 @@ let rec _resolve resolver node =
   | Ast.Call { callee; args } | Ast.Binop { callee; args } ->
       let resolver, ccargs = List.fold_map ~init:resolver ~f:resolve args in
       let resolver, ccallee = resolve resolver callee in
-      resolve_call resolver node ccallee ccargs
+      let resolver, return_type = resolve_call resolver node ccallee ccargs in
+      let resolver = Resolver.add node return_type resolver in
+      (resolver, return_type)
   | Ast.Var _ -> (
-      match Name_resolution.Names.deref resolver.ns node with
+      match Names.deref resolver.ns node with
       | Some reference -> resolve resolver reference
       | None -> failwith "unknown reference" )
   | Ast.FloatLiteral s -> (resolver, Const (Float64 (Float.of_string s)))
@@ -262,7 +238,9 @@ let rec _resolve resolver node =
       | Some typ ->
           let resolver, t = resolve_type resolver typ in
           (resolver, IsInstance t)
-      | None -> (resolver, Unknown) )
+      | None ->
+          let resolver, ty = Resolver.add_free node resolver in
+          (resolver, IsInstance ty) )
   | Ast.Builtin Builtins.ADD_INT ->
       let a = Is Builtins.INT64 in
       (resolver, IsInstance (Appl (Appl (Is Builtins.FUNC, [ a ]), [ a; a ])))
@@ -286,7 +264,7 @@ let rec _resolve resolver node =
       ( resolver,
         IsInstance (Forall (1, Appl (Appl (Is Builtins.FUNC, [ Is Builtins.BOOL ]), [ a; a ]))) )
   | Empty -> (resolver, Unknown)
-  | Ast.Overload { name; items } ->
+  | Ast.Overload { name = _; items } ->
       let resolver, cc_items = List.fold_map ~init:resolver ~f:resolve items in
       (resolver, Ccval.Overload cc_items)
   | e ->
@@ -316,17 +294,10 @@ and resolve resolver (node : Ast.node) =
 let resolve ns _ =
   Stdio.printf "------------------------------\n";
   let result, _ =
-    match Name_resolution.Scope.find ~name:".init" ns.Name_resolution.Names.current_scope with
+    match Names.Scope.find ~name:".init" ns.Names.current_scope with
     | None -> failwith "no main func found"
     | Some main_func ->
-        let init =
-          {
-            Resolver.ns;
-            memo = Map.empty (module Ast.Node);
-            instantiations = Map.empty (module Int);
-            overload_index = Map.empty (module Ast.Node);
-          }
-        in
+        let init = Resolver.create ns in
         resolve init main_func
   in
   ignore @@ Caml.exit 1;

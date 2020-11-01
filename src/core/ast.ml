@@ -52,7 +52,9 @@ type node_data =
   | Member of node memberInfo
   | Return of node
   | Builtin of Builtins.t
+  (* overload sets built during name resolution for adhoc polymorphism *)
   | Overload of { name : string; items : node list }
+  (* | Instantiation of { inner : node; params : Cvalue.t list } *)
   | Empty
 [@@deriving show, sexp_of]
 
