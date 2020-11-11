@@ -43,7 +43,9 @@ and fold_type data typ : Names.t =
 
 let show n =
   Map.iteri n.Names.refs ~f:(fun ~key ~data ->
-      Stdio.printf "    [%s] -> %s\n" (Ast.show_node key) (Ast.nodeName (fst data)))
+      Stdio.printf "    [%s] -> %s\n" (Ast.show_node key) (Ast.nodeName (fst data))) ;
+  Map.iteri n.Names.type_refs ~f:(fun ~key ~data ->
+      Stdio.printf "    [%s] -> %s\n" (Type.show Ast.pp_node key) (Ast.nodeName (fst data)))
 
 let resolve e =
   let global_scope =
