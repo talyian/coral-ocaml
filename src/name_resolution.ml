@@ -17,6 +17,7 @@ let rec run (data : Names.t) node : Names.t =
   | Ast.Func {name; params; body; _} ->
       let outer_scope = Scope.add name node data.current_scope in
       let inner_scope = Scope.nest outer_scope in
+      let inner_scope = Scope.add "__function__" node inner_scope in
       let data = {data with current_scope= inner_scope} in
       let data = List.fold params ~init:data ~f:run in
       let data = run data body in
@@ -24,6 +25,11 @@ let rec run (data : Names.t) node : Names.t =
   | Ast.Param {name; typ; idx= _} ->
       let data = Option.fold ~f:fold_type ~init:data typ in
       {data with current_scope= Scope.add name node data.current_scope}
+  | Ast.Return value ->
+      let data = run data value in
+      let func = Scope.find ~name:"__function__" data.current_scope in
+      let func = Option.value_exn ~message:"function not found for return" func in
+      {data with returns= Map.set data.returns ~key:node ~data:func}
   | Ast.Let (var, value) ->
       let outer_scope = data.current_scope in
       let data = Option.fold ~f:fold_type ~init:data var.varType in
