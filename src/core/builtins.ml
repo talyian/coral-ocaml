@@ -37,6 +37,8 @@ type t =
   | LTE_FLOAT
   | NEQ_FLOAT
   | GTE_FLOAT
+  (* string primitives *)
+  | ADD_STR
   (* primitive types *)
   | VOID
   | BOOL
@@ -51,5 +53,6 @@ type t =
   | PTR
   | FUNC
   | VARFUNC
+  | ELLIPSIS
 (* intrinsics *)
-[@@deriving show { with_path = false }, sexp_of, compare, equal]
+[@@deriving show {with_path= false}, sexp_of, compare, equal]

@@ -1,58 +1,37 @@
-# import cstd (
-#   printf = c_printf,
-#   malloc = c_malloc,
-#   fopen = c_fopen,
-#   fwrite = c_fwrite,
-#   fread = c_fread,
-#   fclose = c_fclose)
+extern("c", "printf", Func[][Str, ...])
 
-let cprintf = extern("c", "printf", Func[][Str, ...])
+# # Regular overloading on parameter type
+# func print(s:Float64):
+#   return printf("Float64: %g\n", s)
+# func print(s:Int64):
+#   return printf("Int64: %ld\n", s)
+# func print(s:Str):
+#   return printf("String: %s\n", s)
 
-# func foobar():
-#   return cprintf("Hello, %s\n", "World")
+# print 3
+# print "four"
+# print 6.6
 
-# foobar ()
+# # Dependent return types on overloads
+func process(s:Int64):
+  return 123.4567
+func process(s:Float64):
+  return "floats return a string"
 
-# func factorial : Int64 (n:Int64):
-#   if n < 2:
-#     return 1
-#   else:
-#     return n * factorial(n - 1)
+printf("%g\n", process 2)
 
-# cprintf("%ld! = %ld\n", 5, factorial 5)
-# cprintf("%ld! = %ld\n", 6, factorial 6)
-# cprintf("%ld! = %ld\n", 7, factorial 7)
-
-# func fizzbuzz(n:Int64):
-#   func fb(n:Int64):
-#     if n % 15 = 0:
-#        cprintf "Fizzbuzz "
-#     elif n % 5 = 0:
-#        cprintf "Buzz "
-#     elif n % 3 = 0:
-#        cprintf "Fizz "
-#     else:
-#        cprintf("%ld ", n)
-#     return ()
-#   if 1 < n:
-#      fizzbuzz(n - 1)
-#   fb n
-#   return ()
-
-# fizzbuzz 33
+# printf("Process: %g -> %s\n", 2.3, process 2.3)
+# printf("Process: %d -> %g\n", 2, process 2)
+# printf("Process: %d --> %s\n", 2, process(process 2))
 
 
-#### Overloading builtin + operator #####
-let x = 1 + 3
-let y = 2.5 + 3.2
-cprintf("test-overloads %d, %f", x, y)
-
-
-#### Testing generic function #####
-# func foo(x):
-#   let x2 = x + x
-#   return x2
-
-# let x = foo 2
-# let y = foo 3.3
-# cprintf("test-generic %d, %f", x, y)
+# calling a func F of type F' | G'  with argument a' picks F' or G' depending on which one accepts a'
+#     if both accept a', it's an error ??? or maybe G' shadows F' because it comes later? or maybe the shadowing
+#     needs to be explicit
+# calling a func F that with argument a of type a' | b' picks either 'a or 'b epending on which one F accepts
+#     if F accepts both a' and b',  then a runtime unpacking is needed
+# calling an overloaded func with an overloaded argument set might be a mess:
+# given Print ... [many overloads]
+# a : Int|Float|Str
+# then `print a` results in (Print[Int]|Print[Float]|Print[Str])(a)
+# and we need to generate the type check`

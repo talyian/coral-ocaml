@@ -1,8 +1,7 @@
-func printf: Void (fmt:String, ...)
+extern("c", "printf", Func[][Str, ...]))
+extern("c", "sqrt", Func[Float64][Float64]))
 
-type vector3d = {x:Float64, y:Float64, z:Float64}
-
-func sqrt: Float64 (n:Float64)
+type vector3d = struct { x:Float64; y:Float64; z:Float64}
 
 func length2 (v:vector3d):
   v.x * v.x + v.y * v.y + v.z * v.z
