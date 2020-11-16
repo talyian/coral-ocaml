@@ -11,7 +11,7 @@ let check_source_compiles source =
       let _ns = Coral_types.Apply_overload_reference.fix_name_resolution _ns _ts in
       (* let _ = Coral.Type_resolution_3.resolve _ns e in *)
       (* let ts = Coral.Type_resolution.resolve e in *)
-      let _ = Coral.Llvm_backend.print_ir _ns e in
+      let _ = Coral.Llvm_backend.print_ir _ns _ts e in
       (* Stdio.print_endline @@ Ast.show_node e; *)
       true
   | Error e ->

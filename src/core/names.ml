@@ -56,6 +56,7 @@ module Names = struct
 
   let deref t node = Map.find t.refs node
   let deref_or_self t node = Some (Option.value ~default:node (Map.find t.refs node))
+  let deref_type t typ = Map.find t.type_refs typ
 end
 
 include Names

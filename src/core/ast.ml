@@ -78,6 +78,7 @@ module Type = struct
     | Type.Parameterized (x, params) ->
         let init = f init x in
         List.fold ~f ~init params
+    | Type.Ref _ -> f init typ
     | Type.Decl _ -> f init typ
     | Type.Free _ -> f init typ
     | Type.Dotted _ -> f init typ

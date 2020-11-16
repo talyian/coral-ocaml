@@ -1,43 +1,67 @@
-let check_source_compiles source =
-  let module Frontend = Coral_frontend.Frontend in
-  match Frontend.parse_string source with
-  | Ok _ -> true
+
+let compile_and_run source =
+  match Coral_frontend.Frontend.parse_string source with
+  | Ok e ->
+    let e = Coral.Init_func.run e in
+    let _imports = Coral.Import_resolution.resolve e in
+    let _ns = Coral.Name_resolution.resolve e in
+    let _ts = Coral_types.Resolver.resolve _ns e in
+    let _ns = Coral_types.Apply_overload_reference.fix_name_resolution _ns _ts in
+    let _ = Coral.Llvm_backend.print_ir _ns _ts e in
+    true
   | Error e ->
-      Printf.printf "%s" (Frontend.show_parseError e);
-      false
+    Stdio.printf "%s" (Coral_frontend.Frontend.show_parseError e);
+    false
+
+let check_source_parses source =
+  match Coral_frontend.Frontend.parse_string source with
+  | Ok _ ->
+    true
+  | Error e ->
+    Stdio.printf "%s" (Coral_frontend.Frontend.show_parseError e);
+    false
+
+let check_source_compiles source =
+  compile_and_run source
 
 let check_file_compiles path =
   let source = Stdio.In_channel.read_all path in
   check_source_compiles source
 
-let%test "hello world" = check_source_compiles {|printf "Hello, World!\n"|}
+let%test "hello world" = check_source_compiles {|
+extern("c", "printf", Func[][Str, ...])
+printf "Hello, World!\n"|}
 
 let%test "fibonacci" =
   check_source_compiles
     {|
+extern("c", "printf", Func[][Str, ...])
+
 func fib(n):
   if n <= 1:
     return 1
   else:
     return fib(n - 1) + fib(n - 2)
 # here we check that trailing dedents are handled correctly as well
-if True:
+if 1:
   printf("%d\n", fib 7)|}
 
 let%test "fizzbuzz" =
   check_source_compiles
     {|
-func fizzbuzz(n):
-  if n % 15 = 0: printf "Fizzbuzz "
-  elif n % 3 = 0: printf "Fizz "
-  elif n % 5 = 0: printf "Buzz "
-  else: printf("%d ", n)
+extern("c", "printf", Func[][Str, ...])
+func fizzbuzz(n:Int64):
+  if n % 15 = 0: return printf "Fizzbuzz "
+  elif n % 3 = 0: return printf "Fizz "
+  elif n % 5 = 0: return printf "Buzz "
+  else: return printf("%d ", n)
 fizzbuzz 10
 fizzbuzz 11
 fizzbuzz 12
 fizzbuzz 13
 fizzbuzz 14
 fizzbuzz 15
+printf "\n"
 |}
 
 let%test "fasta" =
@@ -56,7 +80,7 @@ let%test "sys-io.unix" =
   check_file_compiles "../examples/sys_io.posix.coral"
 
 let%test "indents" =
-  check_source_compiles
+  check_source_parses
     {|
 func digits():
   if 1:
@@ -66,13 +90,11 @@ func digits():
   foo
 |}
   &&
-  check_source_compiles {|func digits():
+  check_source_parses {|func digits():
   foo |}
 
 let%test "overload-builtins" =
   check_source_compiles {|
-let x = 5.5 + 3.3
-let y = 1 + 3
-let z = "thirty " + "five"
-printf("%f, %d, %s\n", x, y, z)
+extern("c", "printf", Func[][Str, ...])
+printf("%f, %d, %s\n", 0.5 + 3.3, 1 + 3, "thirtyfive")
 |}

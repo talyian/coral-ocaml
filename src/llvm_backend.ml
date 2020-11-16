@@ -19,7 +19,8 @@ module Lltype = struct
   let rec of_type (data : compileContext) typ =
     let open Coral_core.Type in
     match typ with
-    | Parameterized (Parameterized (Name "Func", ret), params) -> (
+    | Parameterized (Parameterized (Ref (Ast.Builtin Builtins.FUNC, _), ret), params)
+     |Parameterized (Parameterized (Name "Func", ret), params) -> (
         let ll_ret_type =
           match ret with
           | [] -> Llvm.void_type data.context
@@ -39,10 +40,11 @@ module Lltype = struct
     | Name "Int8" -> Llvm.i8_type data.context
     | Name "Int16" -> Llvm.i16_type data.context
     | Name "Int32" -> Llvm.i32_type data.context
-    | Name "Int64" -> Llvm.i64_type data.context
-    | Name "Float64" -> Llvm.double_type data.context
+    | Ref (Ast.Builtin Builtins.INT64, _) | Name "Int64" -> Llvm.i64_type data.context
+    | Ref (Ast.Builtin Builtins.FLOAT64, _) | Name "Float64" -> Llvm.double_type data.context
     | Name "Void" -> Llvm.void_type data.context
-    | Name "Str" -> Llvm.pointer_type @@ Llvm.i8_type data.context
+    | Ref (Ast.Builtin Builtins.STR, _) | Name "Str" ->
+        Llvm.pointer_type @@ Llvm.i8_type data.context
     | typ -> failwith (Coral_core.Type.show Ast.pp_node typ)
 end
 
@@ -78,7 +80,7 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
        pattern-matchable. For now, I guess the LLVM pass can be smart, but at some point we may
        have a dumber backend that requires prior analysis *)
     match Names.deref_or_self fctx.parent.ns callee with
-    | Some (Ast.Builtin Builtins.EQ, _) -> (
+    | Some (Ast.Builtin Builtins.EQ_INT, _) -> (
       match List.fold_map ~init:fctx ~f:func_codegen args with
       | fctx, [lhs; rhs] -> (fctx, Llvm.build_icmp Llvm.Icmp.Eq lhs rhs "" fctx.builder)
       | _ -> failwith "bad eq arguments" )
@@ -113,7 +115,7 @@ let rec _codegen_func (fctx : func_compile_ctx) node =
       match List.fold_map ~init:fctx ~f:func_codegen args with
       | fctx, [lhs; rhs] -> (fctx, Llvm.build_sdiv lhs rhs "" fctx.builder)
       | _ -> failwith "bad add arguments" )
-    | Some (Ast.Builtin Builtins.MOD, _) -> (
+    | Some (Ast.Builtin Builtins.MOD_INT, _) -> (
       match List.fold_map ~init:fctx ~f:func_codegen args with
       | fctx, [lhs; rhs] -> (fctx, Llvm.build_srem lhs rhs "" fctx.builder)
       | _ -> failwith "bad add arguments" )
@@ -204,7 +206,7 @@ and _mod_codegen (data : compileContext) node =
   | IntLiteral i -> (data, Llvm.const_int_of_string (Llvm.i64_type data.context) i 0)
   | FloatLiteral i -> (data, Llvm.const_float_of_string (Llvm.double_type data.context) i)
   | StringLiteral _ -> (data, Llvm.build_global_stringptr "asdf" "qwer" data.main_builder)
-  | Func {name; ret_type; params; body} ->
+  | Func {name; ret_type= _; params; body} ->
       Stdio.printf "func = %s\n" name ;
       Stdlib.flush_all () ;
       (* TODO: need type analysis to get types of params *)
@@ -212,18 +214,27 @@ and _mod_codegen (data : compileContext) node =
         match fst param with
         | Param {typ= Some t; _} -> (data, Lltype.of_type data t)
         | _ -> failwith "ptype" in
-      let data, ll_ptype = List.fold_map ~init:data ~f:ptype params in
-      let ll_ptype = Array.of_list ll_ptype in
-      let ret_type = Option.value ~default:(Coral_core.Type.Name "Void") ret_type in
-      let ll_ret_type = Lltype.of_type data ret_type in
-      let ll_func_type = Llvm.function_type ll_ret_type ll_ptype in
+      let data, _ = List.fold_map ~init:data ~f:ptype params in
+      (* let ll_ptype = Array.of_list ll_ptype in *)
+      (* let ret_type = Option.value ~default:(Coral_core.Type.Name "Void") ret_type in *)
+      (* let ll_ret_type = Lltype.of_type data ret_type in *)
+      (* let ll_func_type = Llvm.function_type ll_ret_type ll_ptype in *)
       (* *)
-      Stdio.printf "function type: [%s] -> %s\n"
-        (String.concat ~sep:", " @@ List.map ~f:(fun x -> fst x |> Ast.nodeName) params)
-        (Ast.show_coraltype ret_type) ;
+      (* Stdio.printf "function type: [%s] -> %s\n"
+       *   (String.concat ~sep:", " @@ List.map ~f:(fun x -> fst x |> Ast.nodeName) params)
+       *   (Ast.show_coraltype ret_type) ; *)
       Stdio.printf "ts: function type: %s\n"
         ( Coral_types.Resolver.get data.ts node
         |> Option.value_map ~default:"?" ~f:Coral_types.Types.Ccval.show ) ;
+      Stdio.printf "ts: function type to coral type: %s\n"
+        ( Coral_types.Resolver.get data.ts node
+        |> Option.map ~f:Coral_types.Types.Ccval.to_coraltype
+        |> Option.value_map ~default:"?" ~f:Ast.show_coraltype ) ;
+      let func_type =
+        Option.value_exn ~message:"no type for function" (Coral_types.Resolver.get data.ts node)
+      in
+      let func_type = Coral_types.Types.Ccval.to_coraltype func_type in
+      let ll_func_type = Lltype.of_type data func_type in
       (* *)
       let ll_func = Llvm.define_function name ll_func_type data.llmodule in
       (* Recursion : The ll_func value must be visible inside the body

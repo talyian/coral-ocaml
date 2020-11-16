@@ -71,31 +71,8 @@ type resolver = Resolver.t
 
 let get (resolver : resolver) node = Map.find resolver.memo node
 
-(* let rec unify env (x : ccval) (y : ccval) = if Ccval.equal x y then (env, x) else _unify env x y
- *
- * and _unify env x y =
- *   let open Ccval in
- *   match (x, y) with
- *   | TypeVar x, TypeVar y -> bind (TypeVar x) (TypeVar y) env
- *   | TypeVar x, y -> bind (TypeVar x) y env
- *   | x, TypeVar y -> bind (TypeVar y) x env
- *   | x, y -> failwith @@ Printf.sprintf "cannot unify %s and %s" (Ccval.show x) (Ccval.show y) *)
-
-(* let unify_call (environment : t) params args ret =
- *   let rec unifyarg (env : t) = function
- *     | [], [] -> env
- *     | x :: xs, y :: ys ->
- *         let env, z = unify env x y in
- *         unifyarg env (xs, ys)
- *     | _ -> failwith "unify: argument count mismatch"
- *   in
- *   let env = unifyarg environment (params, args) in
- *   let ret = eval_in env ret in
- *   (env, List.nth_exn ret 0) *)
-
 let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
   let open Ccval in
-  Stdio.printf "resolve_call %s\n" (Ccval.show callee) ;
   match callee with
   | IsInstance (Appl (Appl (Is Builtins.VARFUNC, ret), _)) ->
       (resolver, is_instance @@ make_tuple_from_return ret)
@@ -107,13 +84,14 @@ let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
             let arg_type = Ccval.type_of arg in
             if Ccval.equal param_type arg_type then resolver
             else
+              (* unify params and args. If no exc is thrown then the call succeeds *)
               match (param_type, arg_type) with
               | ptype, Freevar i ->
                   Stdio.printf "instantiating free variable %d with %s\n" i (Ccval.show param) ;
                   Resolver.subst ~key:arg_type ~repl:ptype resolver
               | _ ->
-                  Stdio.printf "value mismatch %s <-> %s" (Ccval.show param) (Ccval.show arg) ;
-                  failwith "value mismatch")
+                  failwith
+                  @@ Printf.sprintf "value mismatch %s <-> %s" (Ccval.show param) (Ccval.show arg))
           params args in
       (resolver, is_instance @@ make_tuple_from_return ret)
   | Overload items ->
@@ -157,16 +135,14 @@ let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
 
 exception Ellipsis
 
-let rec resolve_type resolver typ =
+let rec resolve_type (resolver : resolver) typ =
   let open Ccval in
   match typ with
   (* TODO: these should be picked via name resolution *)
-  | Type.Name "Void" -> (resolver, Is Builtins.VOID)
-  | Type.Name "Int64" -> (resolver, Is Builtins.INT64)
-  | Type.Name "Float64" -> (resolver, Is Builtins.FLOAT64)
-  | Type.Name "Func" -> (resolver, Is Builtins.FUNC)
-  | Type.Name "Str" -> (resolver, Is Builtins.STR)
-  | Type.Name "..." -> raise Ellipsis
+  | Type.Name name ->
+      Names.deref_type resolver.ns typ
+      |> (fun x -> Option.value_exn ~message:("unknown type " ^ name) x)
+      |> resolve resolver
   | Type.Parameterized (Type.Parameterized (Type.Name "Func", ret), params) -> (
     try
       let resolver, bs = List.fold_map ~f:resolve_type ~init:resolver params in
@@ -185,29 +161,41 @@ let rec resolve_type resolver typ =
       (resolver, Appl (a, bs))
   | t -> failwith @@ "unknown type" ^ Type.show Ast.pp_node t
 
-let rec _resolve resolver node =
+and _resolve resolver node =
   let open Ccval in
   match fst node with
   | Ast.Func {params; body; name; ret_type} ->
       (* TODO: we really should be doing something particular with return x instead of just
          evaluating it the same as x *)
       Stdio.printf "resolving function: %s\n" name ;
-      let resolver = Resolver.create_child resolver in
-      let freevars_begin = resolver.Resolver.freevars in
+      (* let resolver = Resolver.create_child resolver in *)
+      (* let freevars_begin = resolver.Resolver.freevars in *)
       let resolver, ccparams = List.fold_map ~init:resolver ~f:resolve params in
       let ccparams = List.map ~f:Ccval.type_of ccparams in
       let resolver, cc_ret_type =
         match ret_type with
         | None -> Resolver.add_free_no_expr resolver
         | Some t -> resolve_type resolver t in
+      (* initially set the function type to its declared type *)
       let cc_functype = Appl (Appl (Is Builtins.FUNC, [cc_ret_type]), ccparams) in
       let resolver = Resolver.add node cc_functype resolver in
       let resolver, ccbody = resolve resolver body in
-      if resolver.Resolver.freevars <> freevars_begin then (
-        Stdio.printf "function call produced free variables: %s\n" name ;
-        Resolver.dump resolver ;
-        Caml.exit 1 )
-      else Stdio.printf "function call: %s (%d free vars)\n" name freevars_begin ;
+      (* find all the returns in the function and unify them with cc_ret_type *)
+      let resolver =
+        let f ~key ~data resolver =
+          if Ast.Node.( = ) data node then (
+            let cc_ret_type = Map.find_exn resolver.Resolver.memo key in
+            let cc_ret_type = Ccval.type_of cc_ret_type in
+            let cc_functype = Appl (Appl (Is Builtins.FUNC, [cc_ret_type]), ccparams) in
+            Stdio.printf "%s - %s\n" (Ast.nodeName @@ fst key) (Ast.nodeName @@ fst data) ;
+            Resolver.add node cc_functype resolver )
+          else resolver in
+        Map.fold resolver.ns.returns ~init:resolver ~f in
+      (* if resolver.Resolver.freevars <> freevars_begin then (
+       *   Stdio.printf "function call produced free variables: %s\n" name ;
+       *   Resolver.dump resolver ;
+       *   Caml.exit 1 ) *)
+      (* else Stdio.printf "function call: %s (%d free vars)\n" name freevars_begin ; *)
       Stdio.printf "------------------------------\n" ;
       Resolver.dump resolver ;
       Stdlib.flush_all () ;
@@ -229,7 +217,9 @@ let rec _resolve resolver node =
   | Ast.FloatLiteral s -> (resolver, Const (Float64 (Float.of_string s)))
   | Ast.IntLiteral s -> (resolver, Const (Int64 (Int64.of_string s)))
   | Ast.StringLiteral s -> (resolver, Const (String s))
-  | Ast.Return v -> resolve resolver v
+  | Ast.Return v ->
+      let resolver, v = resolve resolver v in
+      (resolver, v)
   | Ast.Let (_var, value) -> resolve resolver value
   | Ast.Extern {typ; _} ->
       let resolver, typ = resolve_type resolver typ in
@@ -250,7 +240,7 @@ let rec _resolve resolver node =
     | None ->
         let resolver, ty = Resolver.add_free node resolver in
         (resolver, IsInstance ty) )
-  | Ast.Builtin Builtins.ADD_INT ->
+  | Ast.Builtin Builtins.SUB_INT | Ast.Builtin Builtins.MOD_INT | Ast.Builtin Builtins.ADD_INT ->
       let a = Is Builtins.INT64 in
       (resolver, IsInstance (Appl (Appl (Is Builtins.FUNC, [a]), [a; a])))
   | Ast.Builtin Builtins.ADD_FLOAT ->
@@ -266,7 +256,9 @@ let rec _resolve resolver node =
    |Ast.Builtin Builtins.MOD ->
       let a = TypeVar 1 in
       (resolver, IsInstance (Forall (1, Appl (Appl (Is Builtins.FUNC, [a]), [a; a]))))
-  | Ast.Builtin Builtins.EQ
+  | Ast.Builtin Builtins.EQ_INT
+   |Ast.Builtin Builtins.EQ_FLOAT
+   |Ast.Builtin Builtins.EQ
    |Ast.Builtin Builtins.NEQ
    |Ast.Builtin Builtins.LT
    |Ast.Builtin Builtins.LTE
@@ -275,6 +267,8 @@ let rec _resolve resolver node =
       let a = TypeVar 1 in
       ( resolver
       , IsInstance (Forall (1, Appl (Appl (Is Builtins.FUNC, [Is Builtins.BOOL]), [a; a]))) )
+  | Ast.Builtin Builtins.ELLIPSIS -> raise Ellipsis
+  | Ast.Builtin builtin -> (resolver, Ccval.Is builtin)
   | Empty -> (resolver, Unknown)
   | Ast.Overload {name= _; items} ->
       let resolver, cc_items = List.fold_map ~init:resolver ~f:resolve items in

@@ -77,8 +77,6 @@ module Ccval = struct
     | OverloadIndex i -> "ov." ^ Int.to_string i
     | Freevar i -> "\x1b[1;33mτ\x1b[0m" ^ Int.to_string i
 
-  (* | Lambda {params; openvars=_; body} -> Printf.sprintf "λ.%s(%s)" (cc params) (show body) *)
-
   let type_of = function
     | Tuple [] -> Is Builtins.VOID
     | IsInstance x -> x
@@ -95,21 +93,39 @@ module Ccval = struct
     | Tuple ts -> Tuple (List.map ~f:is_instance ts)
     | x -> IsInstance x
 
-  let make_tuple_from_return = function [] -> Is Builtins.VOID | [ x ] -> x | xs -> Tuple xs
+  let make_tuple_from_return = function [] -> Is Builtins.VOID | [x] -> x | xs -> Tuple xs
+  let make_return_from_tuple = function Is Builtins.VOID -> [] | Tuple xs -> xs | x -> [x]
 
   let subst ~key ~repl e =
     if equal e key then repl
     else
       match e with
       | Error | Unknown | Overload _ | Const _
-      | Forall (_, _)
-      | TypeVar _ | Is _
-      | Appl (_, _)
-      | IsInstance _ | TypeOf _
-      | Call (_, _)
-      | Tuple _
-      | And (_, _)
-      | OverloadIndex _ | Freevar _ ->
-          Stdio.printf "subst %s (%s) oops\n" (show e) (show key);
+       |Forall (_, _)
+       |TypeVar _ | Is _
+       |Appl (_, _)
+       |IsInstance _ | TypeOf _
+       |Call (_, _)
+       |Tuple _
+       |And (_, _)
+       |OverloadIndex _ | Freevar _ ->
+          Stdio.printf "subst %s (%s) oops\n" (show e) (show key) ;
           failwith "oops"
+
+  let to_coraltype = function
+    | IsInstance x ->
+        let rec to_coraltype = function
+          | Appl (Appl (Is Builtins.FUNC, [ret]), params) ->
+              let params = List.map ~f:to_coraltype params in
+              let ret = List.map ~f:to_coraltype @@ make_return_from_tuple ret in
+              Coral_core.Type.Parameterized
+                ( Coral_core.Type.Parameterized
+                    (Type.Ref (Ast.mm @@ Ast.Builtin Builtins.FUNC), ret)
+                , params )
+          | Appl (base, params) ->
+              Coral_core.Type.Parameterized (to_coraltype base, List.map ~f:to_coraltype params)
+          | Is x -> Type.Ref (Ast.mm @@ Ast.Builtin x)
+          | e -> Coral_core.Type.Name ("?" ^ show e) in
+        to_coraltype x
+    | e -> Coral_core.Type.Name ("?(expected isInstance)?" ^ show e)
 end

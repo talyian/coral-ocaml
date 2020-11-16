@@ -1,37 +1,22 @@
-extern("c", "printf", Func[][Str, ...])
+# extern("c", "printf", Func[][Str, ...])
 
-# # Regular overloading on parameter type
-# func print(s:Float64):
-#   return printf("Float64: %g\n", s)
-# func print(s:Int64):
-#   return printf("Int64: %ld\n", s)
-# func print(s:Str):
-#   return printf("String: %s\n", s)
+# # double needs to be polymorphic over all types that support add
+# func double (x):
+#    x + x
 
-# print 3
-# print "four"
-# print 6.6
+# printf("double %d = %d\n", 3, double 3)
 
-# # Dependent return types on overloads
-func process(s:Int64):
-  return 123.4567
-func process(s:Float64):
-  return "floats return a string"
-
-printf("%g\n", process 2)
-
-# printf("Process: %g -> %s\n", 2.3, process 2.3)
-# printf("Process: %d -> %g\n", 2, process 2)
-# printf("Process: %d --> %s\n", 2, process(process 2))
-
-
-# calling a func F of type F' | G'  with argument a' picks F' or G' depending on which one accepts a'
-#     if both accept a', it's an error ??? or maybe G' shadows F' because it comes later? or maybe the shadowing
-#     needs to be explicit
-# calling a func F that with argument a of type a' | b' picks either 'a or 'b epending on which one F accepts
-#     if F accepts both a' and b',  then a runtime unpacking is needed
-# calling an overloaded func with an overloaded argument set might be a mess:
-# given Print ... [many overloads]
-# a : Int|Float|Str
-# then `print a` results in (Print[Int]|Print[Float]|Print[Str])(a)
-# and we need to generate the type check`
+# We need to be careful about order of resolution. for example:
+#
+# func foo(x:Alpha) : ...
+# func foo(x:Beta)  : ...
+#
+# func bar(x): foo(x)
+#
+# func foo(x:Delta) : ...
+#
+# bar(alpha) obviously should typecheck
+# bar(delta) ... should it typecheck?
+# on one hand, it seems weird that the signature of "bar" can be modified from  "Func[][Alpha|Beta]" to "Func[][Alpha|Beta|Delta]" after its definition
+# On the other hand, the second behavior is basically happens for "type classes" ...
+# if foo and bar were of type Func[][Fooable] and then it's not surprising that foo takes Delta if Delta is Fooable

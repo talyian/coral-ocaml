@@ -1,4 +1,4 @@
-func printf: Void (fmt:String, ...)
+extern("c", "printf", Func[][Str, ...])
 
 # Parametric Polymorphism
 # Specify generic functions that operate over multiple types
