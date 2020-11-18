@@ -129,9 +129,9 @@ let rec resolve_call (resolver : resolver) call callee (args : ccval list) =
       let out = Ccval.Unknown in
       (resolver, out)
   | _ ->
-      Stdio.eprintf "unknown call situation %s (%s)\n" (Ccval.show callee)
-        (String.concat ~sep:", " @@ List.map ~f:Ccval.show args) ;
-      failwith "unknown call"
+      failwith
+      @@ Printf.sprintf "unknown call situation %s (%s)\n" (Ccval.show callee)
+           (String.concat ~sep:", " @@ List.map ~f:Ccval.show args)
 
 exception Ellipsis
 

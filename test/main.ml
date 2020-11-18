@@ -1,5 +1,5 @@
 
-let compile_and_run source =
+let compiles source =
   match Coral_frontend.Frontend.parse_string source with
   | Ok e ->
     let e = Coral.Init_func.run e in
@@ -13,7 +13,7 @@ let compile_and_run source =
     Stdio.printf "%s" (Coral_frontend.Frontend.show_parseError e);
     false
 
-let check_source_parses source =
+let parses source =
   match Coral_frontend.Frontend.parse_string source with
   | Ok _ ->
     true
@@ -21,19 +21,19 @@ let check_source_parses source =
     Stdio.printf "%s" (Coral_frontend.Frontend.show_parseError e);
     false
 
-let check_source_compiles source =
-  compile_and_run source
+let check_source compiles source =
+  compiles source
 
-let check_file_compiles path =
+let check_file compiles path =
   let source = Stdio.In_channel.read_all path in
-  check_source_compiles source
+  compiles source
 
-let%test "hello world" = check_source_compiles {|
+let%test "hello world" = check_source compiles {|
 extern("c", "printf", Func[][Str, ...])
 printf "Hello, World!\n"|}
 
 let%test "fibonacci" =
-  check_source_compiles
+  check_source parses
     {|
 extern("c", "printf", Func[][Str, ...])
 
@@ -47,7 +47,7 @@ if 1:
   printf("%d\n", fib 7)|}
 
 let%test "fizzbuzz" =
-  check_source_compiles
+  check_source compiles
     {|
 extern("c", "printf", Func[][Str, ...])
 func fizzbuzz(n:Int64):
@@ -65,22 +65,22 @@ printf "\n"
 |}
 
 let%test "fasta" =
-  check_file_compiles "../examples/benchmarks_game/fasta.coral"
+  check_file parses "../examples/benchmarks_game/fasta.coral"
 
 let%test "pidigits" =
-  check_file_compiles "../examples/benchmarks_game/pidigits.coral"
+  check_file parses "../examples/benchmarks_game/pidigits.coral"
 
 let%test "knucleotide" =
-  check_file_compiles "../examples/benchmarks_game/knucleotide.coral"
+  check_file parses "../examples/benchmarks_game/knucleotide.coral"
 
 let%test "regex-redux" =
-  check_file_compiles "../examples/benchmarks_game/regex-redux.coral"
+  check_file parses "../examples/benchmarks_game/regex-redux.coral"
 
 let%test "sys-io.unix" =
-  check_file_compiles "../examples/sys_io.posix.coral"
+  check_file parses "../examples/sys_io.posix.coral"
 
 let%test "indents" =
-  check_source_parses
+  check_source parses
     {|
 func digits():
   if 1:
@@ -90,11 +90,11 @@ func digits():
   foo
 |}
   &&
-  check_source_parses {|func digits():
+  check_source parses {|func digits():
   foo |}
 
 let%test "overload-builtins" =
-  check_source_compiles {|
+  check_source compiles {|
 extern("c", "printf", Func[][Str, ...])
 printf("%f, %d, %s\n", 0.5 + 3.3, 1 + 3, "thirtyfive")
 |}
