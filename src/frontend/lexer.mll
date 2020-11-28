@@ -94,6 +94,7 @@ rule coral_token ctx = parse
 and comment ctx = parse
   | '\n' [' ']* as tok { handle_newline (String.length tok - 1) ctx lexbuf }
   | _ { comment ctx lexbuf }
+  | eof { handle_newline 0 ctx lexbuf }
 and string_token buf = parse
   | '"' { Token.STRING(Buffer.contents buf) }
   | '\\' { Buffer.add_char buf @@ parse_escape '"' lexbuf; string_token buf lexbuf }

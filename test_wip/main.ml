@@ -13,15 +13,15 @@ let check_source_compiles source =
       (* Stdio.print_endline @@ Ast.show_node e; *)
       true
   | Error e ->
-      Stdio.eprintf "[%s]" (Frontend.show_parseError e);
+      Stdio.eprintf "%s" (Frontend.show_parseError e);
       false
   | exception _exn ->
-    Stdio.print_endline @@ Exn.to_string _exn;
+    Stdio.print_endline @@ Caml.Printexc.get_backtrace ();
     false
+
 let check_file_compiles path =
   let source = Stdio.In_channel.read_all path in
   check_source_compiles source
 
 let%test "wip" =
-  Stdio.print_endline @@ Unix.getcwd();
   check_file_compiles "../examples/wip.coral"
