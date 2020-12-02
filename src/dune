@@ -2,6 +2,9 @@
  (name coral)
  (modules
    import_resolution name_resolution init_func llvm_backend)
+ (foreign_stubs
+  (language c)
+  (names foobar))
  (libraries coral_types coral_core coral_frontend str ctypes ctypes.foreign llvm
             llvm.analysis llvm.passmgr_builder llvm.executionengine ppx_let)
  (preprocess
@@ -10,9 +13,6 @@
 (executable
  (name main)
  (modules main)
- (foreign_stubs
-  (language c)
-  (names foobar))
  (libraries coral)
  (preprocess
   (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))

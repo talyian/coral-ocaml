@@ -2,3 +2,4 @@ _build
 _tags
 *.native
 .merlin
+.#*
