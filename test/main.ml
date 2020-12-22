@@ -1,9 +1,11 @@
 
 let compiles source =
-  match Coral_frontend.Frontend.parse_string source with
+  match 
+    Coral.Import_resolution.resolve
+      ~parse_func:Coral_frontend.Frontend.parse_string
+      source with
   | Ok e ->
     let e = Coral.Init_func.run e in
-    let _imports = Coral.Import_resolution.resolve e in
     let _ns = Coral.Name_resolution.resolve e in
     let _ts = Coral_types.Resolver.resolve _ns e in
     let _ns = Coral_types.Apply_overload_reference.fix_name_resolution _ns _ts in

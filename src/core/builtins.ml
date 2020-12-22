@@ -55,4 +55,4 @@ type t =
   | VARFUNC
   | ELLIPSIS
 (* intrinsics *)
-[@@deriving show {with_path= false}, sexp_of, compare, equal]
+[@@deriving show {with_path= false}, sexp, compare, equal]

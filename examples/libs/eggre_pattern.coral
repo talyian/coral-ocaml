@@ -1,0 +1,99 @@
+
+
+module CharPatterns:
+  type C = Char
+  type Literal = struct { C }
+  type Sequence = struct { Nonsequence(C); Pattern(C) }
+  type Option = struct { Nonoption(C); Pattern(C) }
+  type Star = struct { Pattern(C) }
+  type Plus = struct { Pattern(C) }
+  type Repeat = struct { Pattern(C); min:Option(Int32); max:Option(Int32) }
+  type Class = struct { String }
+  type Ranges = List(struct { begin:Char; end:Char })
+
+  type Pattern = Literal | Sequence | Option | Star | Plus | Repeat | Class | Ranges
+  type Nonsequence = Pattern - Sequence
+  type Nonoption = Pattern - Option
+
+
+
+module PatternParser:
+  ## Grammar:
+  # pattern -> optn EOF
+  # optn    -> sequence
+  #         -> sequence PIPE optn
+  # sequence -> seq_item
+  #          -> seq_item sequence
+  # seq_item -> LITERAL
+  #          -> seq_item STAR
+  #          -> seq_item PLUS
+  #          -> LPAREN optn RPAREN
+  #          -> LBRACKET nonempty_list(bracket_item) RBRACKET
+  # bracket_item -> LITERAL MINUS LITERAL
+  #              -> LITERAL
+
+  type Parse(s, pos=0) = struct:
+     func peek(): s[pos]
+     func drop(): set pos += 1
+
+     func parse_pattern(): parse_optn()
+
+     func parse_optn(s):
+        let! seq = parse_sequence()
+        if s.peek() != '|':
+           return! seq
+        let! tail = drop() . parse_optn ()
+        return! Option(seq, tail)
+
+     func parse_sequence():
+        let! seq = parse_seq_item ()
+        match parse_sequence ():
+          Error _: return! seq
+          _ as tail: return! Seq(seq, tail)
+
+     func parse_seq_item():
+        if peek() == '[':
+           drop()
+           wihle peek() parse_bracket_item() as item:
+             ()
+           let! _ = parse_exact ']'
+
+  # Parsing uses a stack of nested parentheses levels.
+  # abc(de(fg)h)i
+
+  # [[a.b.c]
+  #  [d.e]
+  #  [f.g]]
+
+  # [[a.b.c]
+  #  [d.e.(fg)]]
+
+  # [[a.b.c]
+  #  [d.e.(fg)h]]
+
+  # [[a.b.c.(d.e.(fg)h)]]
+func parse_item(s):
+  match s[0]:
+    case '|':
+    case ')':
+    case '*':
+    case '+':
+    case '(':
+    case '[':
+    case ']':
+func parse(state, s:Stack[Stack[_]]):
+  match s:
+     []: ()
+     # for open parens, we push a new level onto the stack
+     '(' :: s: parse([] :: state, s)
+     # for close parens, we push the last level into the previous one
+     ')' :: s:
+        match state:
+          (last :: previous :: rest):
+             parse((last :: previous) :: rest, s)
+          (_):
+             failwith "unmatched right parentheses"
+     '|' :: s:
+        match state:
+          last :: rest:
+             Option(last, parse([[]], s))

@@ -1,0 +1,8 @@
+# Basic Adhoc polymorphism - operators
+extern("c", "printf", Func[][Str, ...])
+extern("c", "expect", Func[][Str])
+
+let x = 1 + 2
+let y = 3.4 + 5.5
+printf("Hello, %s (%d) (%g)", "World", x, y)
+expect "Hello, World (%3) (8.9)"

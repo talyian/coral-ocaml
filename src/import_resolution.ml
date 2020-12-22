@@ -1,44 +1,50 @@
 open Coral_core
+open Base
 
-(** To import a module, [import Foo.Bar] will find the file "foo/bar.coral"
-relative to a system import-root setting.
+(** To import a module, [import Foo.Bar] will find the file "foo/bar.coral" relative to a system
+    import-root setting.
 
- ** Paths:
- *** Absolute imports
- **** System imports
- **** Project dependency imports
- *** Relative imports
+    ** Paths: *** Absolute imports **** System imports **** Project dependency imports *** Relative
+    imports
 
- ** which imports
-*)
+    ** which imports *)
 
-(* The two primary places to search for an import file is either a system-level import root
-   or a project-level import root *)
-module type Settings = sig
-  val import_root : string
+module Imports = struct
+  type node = Ast_node.Adt.node
+  type resolved = {full_path: string; expr: node}
 
-  val project_import_root : string
+  let new_resolved full_path expr = {full_path; expr}
+
+  type t =
+    {imports: (Ast_node.Adt.node, Ast_node.Adt.node, Ast_node.Adt.Node.comparator_witness) Map.t}
+
+  let add t key data = {imports= Map.set ~key ~data t.imports}
 end
 
-type path =
-  (* TODO: uri imports a la Go *)
-  | AbsolutePath of string list
-  | RelativePath of string list
+let try_read_file path = try Some (Stdio.In_channel.read_all path) with _ -> None
 
-let try_read_file path =
-  try Some (Stdio.In_channel.read_all path) with _ -> None
+(* We're parameterized over the parser function type so that this module can be compiled
+   independently from the frontend *)
+type parse_function_t =
+  string -> (Ast_node.Adt.node, Coral_frontend.Frontend.parseError) Base.Result.t
 
-let rec resolve expr =
-  match expr with
-  | Ast.Import import, _ ->
-      Stdio.printf "IMPORT\n";
-      let filename = String.concat "/" import.path ^ ".coral" in
-      let _found_module =
-        Base.List.find_map
-          ~f:(fun parent_path -> try_read_file @@ parent_path ^ filename)
-          [ "../../../examples"; "../../../examples/stdlib" ]
-      in
-      (* find filename relative to system import-root *)
-      (* find filename relative to project root. if importing module is a script, project root is its parent folder *)
-      ()
-  | _ -> Ast.iter resolve expr
+let resolve ~(parse_func : parse_function_t) (src : string) =
+  let load_import ~path : Imports.resolved option =
+    (* Given a "relative" import path, resolve the path and load the source from that path *)
+    let filename = String.concat ~sep:"/" path ^ ".coral" in
+    Base.List.find_map
+      ~f:(fun parent_path ->
+        let open Option.Let_syntax in
+        let full_path = parent_path ^ filename in
+        let%bind text = try_read_file full_path in
+        let%bind expr = parse_func text |> Result.ok in
+        Option.some @@ Imports.new_resolved full_path expr)
+      ["../../../examples"; "../../../examples/stdlib"] in
+  let init = {Imports.imports= Map.empty (module Ast_node.Adt.Node)} in
+  let%bind.Result expr = parse_func src in
+  let rec f x = function
+    | Ast_node.Adt.Node.Import {path; names; info} ->
+      
+    | _ -> x in
+  let _imports = Ast_node.Adt.fold_info ~init ~f expr in
+  Ok ()
