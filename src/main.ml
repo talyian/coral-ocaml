@@ -1,8 +1,9 @@
 open Coral_frontend
 open Base
 
-let check_source_compiles source =
-  match Frontend.parse_string source with
+let check_source_compiles src =
+  let _oo = Coral.Import_resolution.resolve ~parse_func:Frontend.parse_string ~src in
+  match _oo with
   | Ok e ->
       let e = Coral.Init_func.run e in
       let _imports = Coral.Import_resolution.resolve e in

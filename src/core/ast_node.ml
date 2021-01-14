@@ -6,14 +6,11 @@
 
 open Base
 
-(* Represents a thing you import:
- * import foo.bar.baz
- * import foo.bar.baz (...)
- * import foo.bar.baz (alpha, Bravo as beta) 
- *)
-type importType = Module of string option | All | Member of string * string option
-[@@deriving compare, sexp]
+(* Represents a type-level expression.
 
+   TODO: It's questionable whether this is actually useful; let x = foo : type_a.type_b[type_c]
+   seems like it could be represented as either call(dotted(id(type_a), type_b), id(type_c)) as a
+   Node.t level or as applied(dotted(name(type_a), type_b), name(type_c)) ad a Type.t level. *)
 module Type = struct
   type 'node t =
     | Name of string
@@ -23,6 +20,14 @@ module Type = struct
     | Ellipsis
   [@@deriving sexp, compare]
 end
+
+(* Represents a thing you import:
+ * import foo.bar.baz
+ * import foo.bar.baz (...)
+ * import foo.bar.baz (alpha, Bravo as beta) 
+ *)
+type importType = Module of string option | All | Member of string * string option
+[@@deriving compare, sexp]
 
 (* An Ast can be decorated with additional info per node.
  * name resolution can point to other ast nodes

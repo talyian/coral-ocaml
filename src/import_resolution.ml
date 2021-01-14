@@ -16,9 +16,11 @@ module Imports = struct
   let new_resolved full_path expr = {full_path; expr}
 
   type t =
-    {imports: (Ast_node.Adt.node, Ast_node.Adt.node, Ast_node.Adt.Node.comparator_witness) Map.t}
+    { main: Ast_node.Adt.node
+    ; imports: (Ast_node.Adt.node, Ast_node.Adt.node, Ast_node.Adt.Node.comparator_witness) Map.t
+    }
 
-  let add t key data = {imports= Map.set ~key ~data t.imports}
+  let add t key data = {t with imports= Map.set ~key ~data t.imports}
 end
 
 let try_read_file path = try Some (Stdio.In_channel.read_all path) with _ -> None
@@ -28,7 +30,8 @@ let try_read_file path = try Some (Stdio.In_channel.read_all path) with _ -> Non
 type parse_function_t =
   string -> (Ast_node.Adt.node, Coral_frontend.Frontend.parseError) Base.Result.t
 
-let resolve ~(parse_func : parse_function_t) (src : string) =
+let resolve ~(parse_func : parse_function_t) ~(src : string) =
+  (* load_import : string -> resolved option *)
   let load_import ~path : Imports.resolved option =
     (* Given a "relative" import path, resolve the path and load the source from that path *)
     let filename = String.concat ~sep:"/" path ^ ".coral" in
@@ -40,11 +43,8 @@ let resolve ~(parse_func : parse_function_t) (src : string) =
         let%bind expr = parse_func text |> Result.ok in
         Option.some @@ Imports.new_resolved full_path expr)
       ["../../../examples"; "../../../examples/stdlib"] in
-  let init = {Imports.imports= Map.empty (module Ast_node.Adt.Node)} in
   let%bind.Result expr = parse_func src in
-  let rec f x = function
-    | Ast_node.Adt.Node.Import {path; names; info} ->
-      
-    | _ -> x in
+  let init = {Imports.main= expr; Imports.imports= Map.empty (module Ast_node.Adt.Node)} in
+  let f (imports : Imports.t) _node : Imports.t = imports in
   let _imports = Ast_node.Adt.fold_info ~init ~f expr in
-  Ok ()
+  Ok _imports
