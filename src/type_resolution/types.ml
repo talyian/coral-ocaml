@@ -112,20 +112,21 @@ module Ccval = struct
           Stdio.printf "subst %s (%s) oops\n" (show e) (show key) ;
           failwith "oops"
 
-  let to_coraltype = function
-    | IsInstance x ->
-        let rec to_coraltype = function
-          | Appl (Appl (Is Builtins.FUNC, [ret]), params) ->
-              let params = List.map ~f:to_coraltype params in
-              let ret = List.map ~f:to_coraltype @@ make_return_from_tuple ret in
-              Coral_core.Type.Parameterized
-                ( Coral_core.Type.Parameterized
-                    (Type.Ref (Ast.mm @@ Ast.Builtin Builtins.FUNC), ret)
-                , params )
-          | Appl (base, params) ->
-              Coral_core.Type.Parameterized (to_coraltype base, List.map ~f:to_coraltype params)
-          | Is x -> Type.Ref (Ast.mm @@ Ast.Builtin x)
-          | e -> Coral_core.Type.Name ("?" ^ show e) in
-        to_coraltype x
-    | e -> Coral_core.Type.Name ("?(expected isInstance)?" ^ show e)
+  (* let to_coraltype = function
+   *   | IsInstance x ->
+   *       let rec to_coraltype = function
+   *         | Appl (Appl (Is Builtins.FUNC, [ret]), params) ->
+   *             let params = List.map ~f:to_coraltype params in
+   *             let ret = List.map ~f:to_coraltype @@ make_return_from_tuple ret in
+   *             (\* Coral_core.Type.Parameterized
+   *              *   ( Coral_core.Type.Parameterized
+   *              *       (Type.Ref (Ast.mm @@ Ast.Builtin Builtins.FUNC), ret)
+   *              *   , params ) *\)
+   *             ()
+   *         | Appl (base, params) ->
+   *             (\* Coral_core.Type.Parameterized (to_coraltype base, List.map ~f:to_coraltype params) *\)
+   *         | Is x -> Type.Ref (Ast.mm @@ Ast.Builtin x)
+   *         | e -> Coral_core.Type.Name ("?" ^ show e) in
+   *       to_coraltype x
+   *   | e -> Coral_core.Type.Name ("?(expected isInstance)?" ^ show e) *)
 end

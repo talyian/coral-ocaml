@@ -1,0 +1,6 @@
+# For bootstrapping purposes, we load some functionality from the c stdlib
+# Eventually we should aim to be C-free
+
+extern("c", "malloc", Func[Ptr[Uint8]][Uint64])
+extern("c", "free"  , Func[][Ptr[Uint8]])
+extern("c", "printf", Func[][Ptr[Uint8], ...])

@@ -1,22 +1,25 @@
 type parseError =
-  { error_token: string
+  { file_name: string option
+  ; error_token: string
   ; context_before: string
   ; context_after: string
   ; column_number: int
   ; line_number: int }
 
 let show_parseError e =
-  Printf.sprintf "Parse Error: Line %d:%d: [" e.line_number e.column_number
-  ^ Printf.sprintf "%s\x1b[1;41m%s\x1b[0m%s\n%s%s\n" e.context_before e.error_token e.context_after
+  let open Printf in
+  (match e.file_name with Some f -> sprintf " (%s) " f | None -> "")
+  ^ sprintf "Parse Error: Line %d:%d: [" e.line_number e.column_number
+  ^ sprintf "%s\x1b[1;41m%s\x1b[0m%s\n%s%s\n" e.context_before e.error_token e.context_after
       (if e.column_number < 0 then "" else String.make e.column_number ' ')
       (String.make (String.length e.error_token) '^')
   ^ "]"
 
-let parse_string s =
+let parse_string ?file_name s : (Coral_core.Ast.t, parseError) Result.t =
   let lexbuf = Lexing.from_string s in
   let tokenf = LexerInterface.create_tokenizer () in
   match Grammar.main tokenf lexbuf with
-  | expr -> Ok expr
+  | Main expr -> Ok expr
   | exception _ ->
       let startp = Lexing.lexeme_start_p lexbuf in
       let endp = Lexing.lexeme_end_p lexbuf in
@@ -35,7 +38,8 @@ let parse_string s =
           if pos = mpos then pos else if s.[pos] = '\n' then pos else f (pos + 1) mpos in
         f error_end (String.length s) in
       Error
-        { error_token= lexeme
+        { file_name
+        ; error_token= lexeme
         ; column_number= startp.pos_cnum - startp.pos_bol
         ; line_number= startp.pos_lnum
         ; context_before= String.sub s context_start (error_start - context_start)

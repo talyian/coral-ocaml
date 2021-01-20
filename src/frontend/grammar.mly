@@ -1,6 +1,6 @@
 %{
-open Coral_core.Ast_node
-module Type = Coral_core.Ast_node.Type
+module Node = Coral_core.Ast
+module Make = Coral_core.Ast.Make
 %}
 
 %token <string> INTEGER
@@ -22,12 +22,12 @@ module Type = Coral_core.Ast_node.Type
 %left OPERMUL
 
 %start main
-%type <Coral_core.Ast_node.Adt.node> main
+%type <Grammar_helper.main_type> main
 %%
 
 main
-: newlines? x=lines EOF { Make.moduleNode "" x }
-| newlines? x=lines_nl EOF { Make.moduleNode "" x }
+: newlines? x=lines EOF { Grammar_helper.Main(Make.moduleNode "" x) }
+| newlines? x=lines_nl EOF { Grammar_helper.Main(Make.moduleNode "" x) }
 
 newlines
 : NEWLINE+ { }
@@ -121,9 +121,9 @@ expr_op_unit
 (* so we can do this in the grammar, by making a expr_atom_but_not_tuple pattern
    but doing it inside the reduction seems okay too *)
     | callee=expr_op_unit arg=expr_atom {
-        match arg with
-        | Tuple {items=args;_} -> Make.callNode callee args
-        | arg -> Make.callNode callee [arg] }
+        match !arg with
+        | Node.Tuple {items=args;_} -> Make.callNode callee args
+        | _ -> Make.callNode callee [arg] }
 
 binary_op_expr
     : e=expr_op_unit { e }
@@ -142,17 +142,21 @@ In other places, we might be able to get away with requiring parentheses. *)
 expr
     : e=binary_op_expr { e }
     | expr_atom COLON typedef { $1 }
-    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Make.import path [Coral_core.Ast_node.Module None] }
-    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN RPAREN { Make.import path [Coral_core.Ast_node.All] }
+    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Make.import path [Coral_core.Ast.Module None] }
+  | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN items=separated_list(COMMA, IDENTIFIER) RPAREN {
+                                                                                      Make.import path [Coral_core.Ast.All] }
     | EXTERN LPAREN fftype=STRING COMMA name=STRING COMMA _type=typedef RPAREN {
         Make.extern fftype name _type  }
 
 typedef
-    : IDENTIFIER { Type.Name $1 }
-    | typedef DOT IDENTIFIER { Type.Dotted {base=$1; member=$3} }
-    | typedef LBRACKET separated_list(COMMA, typedef) RBRACKET { Type.Applied{base=$1; params=$3} }
-    | ELLIPSIS { Type.Ellipsis }
+    : IDENTIFIER { Make.var $1 }
+    | typedef DOT IDENTIFIER { Make.member $1 $3 }
+    | typedef LBRACKET separated_list(COMMA, type_parameter) RBRACKET { Make.callNode $1 $3 }
+    | ELLIPSIS { Make.var "..." }
 
+type_parameter
+    : typedef { $1 }
+    | IDENTIFIER COLON typedef { $3 }
 e_exprlist : { [] } | exprlist { $1 }
 
 exprlist
@@ -172,7 +176,8 @@ member
 
 type_definition
     : TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE separated_list_trailing(SEMICOLON, typedecl_field) RBRACE { Make.empty }
-
+    | TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE RBRACE { Make.empty }
+    | TYPE _name=IDENTIFIER EQ typedef { Make.empty }
 (* Like separated_list, but we can accept a trailing delimiter as well.  Not
    sure how to write this; the simple pattern "separated_list(S, X) S?" doesn't
    work because by the time the S gets shifted, you're already in a

@@ -16,7 +16,7 @@ type cconst = Cconst.t
     relies on Name resolver ) and produces a map of Ast.Node -> ccval for later stages *)
 module Resolver = struct
   type t =
-    { ns: Names.t
+    { ns: Coral_core.Names.t
     ; memo: ccval Ast.Node.Map.t
     ; instantiations: ccval Map.M(Int).t
     ; (* For any given call node referencing an overload, stores the index of which overload was

@@ -2,7 +2,12 @@
  (name tests)
  (inline_tests
   (flags -verbose))
- (modules main)
- (libraries unix coral_frontend coral_types coral)
+ (modules basics utils name_resolution)
+ (libraries unix coral_frontend coral_core coral_passes)
  (preprocess
-  (pps ppx_inline_test)))
+  (pps ppx_let ppx_expect ppx_inline_test)))
+
+(env
+ (dev
+  (flags
+   (:standard -w +8-26-27-33))))

@@ -1,0 +1,11 @@
+* Tasks: most of these files are currently aspirational
+* the status each file can be in is:
+** - IDEA - still fleshing out how it will work
+** - PARSE - it parses in the frontend
+** - TYPE - it can be type-checked
+** - CODEGEN - it can be codegen'ed
+
+
+* Stdlib
+** raw_posix - exposes externs for raw posix calls
+** raw_win32 - exposes externs for raw win32 calls

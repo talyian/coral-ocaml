@@ -1,0 +1,1 @@
+extern("c", "printf", Func[][...])

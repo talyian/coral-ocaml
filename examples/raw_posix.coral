@@ -1,0 +1,36 @@
+type ssize_t = IntSize
+type size_t = UintSize
+type int = Int32
+type void = Unit
+type voidptr = Ptr[void]
+type char = Uint8
+
+type Flags = c_enum {
+  # One of the following three must be provided
+  # O_RDONLY = 0;
+  # O_WRONLY = 1;
+  # O_RDWR = 2;
+  # # Zero or more of the following can be provided
+  # O_APPEND;
+  # O_ASYNC;
+  # O_CLOEXEC;
+  # O_CREAT;
+  # O_DIRECT;
+  # O_DIRECTORY;
+  # O_EXCL;
+  # O_LARGEFILE;
+  # O_NOATIME;
+  # O_NOCTTY;
+  # O_NOFOLLOW;
+  # O_NONBLOCK;
+  # O_PATH;
+  # O_SYNC;
+  # O_TMPFILE;
+  # O_TRUNC;
+}
+
+type Fd = int
+extern("c", "open", Func[Fd][pathname:Ptr[char], flags:Flags]) # returns -1 on error and sets errno
+extern("c", "close", Func[int][Fd]) # returns SUCCESS=0,  -1 on error and sets errno,
+extern("c", "read", Func[ssize_t][Fd, buf:voidptr, count:size_t]) # returns num bytes read, 0 = eof, -1 on error and sets errno
+extern("c", "dup", Func[Fd][Fd]) # returns -1 on error and sets errno
