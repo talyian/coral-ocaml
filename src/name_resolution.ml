@@ -80,37 +80,5 @@ let resolve_with scope e =
   let x = NameTraversal.empty () in
   run {x with current_scope= scope} e
 
-(* TODO: at some point we should move this to a higher-level library with all the other
-   builtin-handling stuff *)
-let default_global_scope =
-  let open Ast in
-  let open Builtins in
-  let builtin x = ref @@ Ast.Builtin {builtin= x; info= Info.create ()} in
-  let overload name items =
-    ref @@ Ast.Overload {name; items= List.map ~f:builtin items; info= Info.create ()} in
-  Scope.create ()
-  |> Scope.add "Func" @@ builtin @@ FUNC
-  |> Scope.add "..." @@ builtin @@ ELLIPSIS
-  |> Scope.add "Str" @@ builtin @@ STR
-  |> Scope.add "Uint8" @@ builtin @@ UINT8
-  |> Scope.add "Uint32" @@ builtin @@ UINT32
-  |> Scope.add "Uint64" @@ builtin @@ UINT64
-  |> Scope.add "Int8" @@ builtin @@ INT8
-  |> Scope.add "Int32" @@ builtin @@ INT32
-  |> Scope.add "Int64" @@ builtin @@ INT64
-  |> Scope.add "Float64" @@ builtin @@ FLOAT64
-  |> Scope.add "Void" @@ builtin @@ VOID
-  |> Scope.add "Ptr" @@ builtin @@ PTR
-  |> Scope.add "+" (overload "+" [ADD_INT; ADD_FLOAT; ADD_STR])
-  |> Scope.add "-" (overload "-" [SUB_INT; SUB_FLOAT])
-  |> Scope.add "*" (overload "*" [MUL_INT; MUL_FLOAT])
-  |> Scope.add "/" (overload "/" [DIV_INT; DIV_FLOAT])
-  |> Scope.add "%" (overload "%" [MOD_INT; MOD_FLOAT])
-  |> Scope.add "=" (overload "=" [EQ_INT; EQ_FLOAT])
-  |> Scope.add "!=" (overload "!=" [NEQ_INT; NEQ_FLOAT])
-  |> Scope.add "<" (overload "<" [LT_INT; LT_FLOAT])
-  |> Scope.add ">" (overload ">" [GT_INT; GT_FLOAT])
-  |> Scope.add "<=" (overload "<=" [LTE_INT; LTE_FLOAT])
-  |> Scope.add ">=" (overload ">=" [GTE_INT; GTE_FLOAT])
-
+let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
 let resolve e = resolve_with default_global_scope e
