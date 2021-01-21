@@ -1,0 +1,27 @@
+# extern("c", "printf", Func[][Str, ...])
+
+# # double needs to be polymorphic over all types that support add
+# func double (x):
+#    x + x
+
+# printf("double %d = %d\n", 3, double 3)
+
+# We need to be careful about order of resolution. for example:
+#
+# func foo(x:Alpha) : ...
+# func foo(x:Beta)  : ...
+#
+# func bar(x): foo(x)
+#
+# func foo(x:Delta) : ...
+#
+# bar(alpha) obviously should typecheck
+# bar(delta) ... should it typecheck?
+# on one hand, it seems weird that the signature of "bar" can be modified from  "Func[][Alpha|Beta]" to "Func[][Alpha|Beta|Delta]" after its definition
+# On the other hand, the second behavior is basically happens for "type classes" ...
+# if foo and bar were of type Func[][Fooable] and then it's not surprising that foo takes Delta if Delta is Fooable
+extern("c", "printf", Func[][Str, ...])
+extern("c", "hellow", Func[Int64][])
+func foo():
+  hellow ()
+foo()
