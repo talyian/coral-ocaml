@@ -1,6 +1,6 @@
-;; (library
-;;  (name coral_types)
-;;  (libraries re stdio base coral_core)
-;;  (preprocess
-;;   (pps ppx_compare ppx_variants_conv ppx_deriving.show ppx_sexp_conv
-;;     ppx_fields_conv)))
+(library
+ (name coral_types)
+ (libraries re stdio base coral_core)
+ (preprocess
+  (pps ppx_compare ppx_variants_conv ppx_deriving.show ppx_sexp_conv
+    ppx_fields_conv)))

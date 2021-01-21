@@ -34,8 +34,11 @@ module NameTraversal = struct
     ; current_scope= Scope.create () }
 end
 
+type t = NameTraversal.t
+
 (* Builds a Names.t by traversing an Ast *)
-let rec run (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
+let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
+  let run = run imports in
   match !node with
   | Ast.Var {name; _} ->
       let reference = Scope.find ~name data.current_scope in
@@ -76,9 +79,10 @@ let show n =
   Map.iteri n.NameTraversal.refs ~f:(fun ~key ~data ->
       Stdio.printf "    [%s] -> %s\n" (Ast.show key) (Ast.show data))
 
-let resolve_with scope e =
-  let x = NameTraversal.empty () in
-  run {x with current_scope= scope} e
-
 let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
-let resolve e = resolve_with default_global_scope e
+
+let resolve imports =
+  let x = NameTraversal.empty () in
+  run imports
+    {x with current_scope= default_global_scope}
+    imports.Coral_frontend.Import_resolution.Imports.main

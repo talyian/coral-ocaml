@@ -2,7 +2,7 @@
  (name coral_passes)
  (modules
    name_resolution init_func builtin_defs)
- (libraries coral_core)
+ (libraries coral_core coral_frontend)
  (preprocess (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))
 
 ;; (library
@@ -27,4 +27,4 @@
 (env
  (dev
   (flags
-   (:standard -warn-error +8-26-27-33))))
+   (:standard -warn-error +8-26-27-32-33))))

@@ -7,7 +7,7 @@ let check_source_compiles src =
   match oo with
   | Ok imported ->
       let e = imported.main in
-      let names = Name_resolution.resolve e in
+      let names = Name_resolution.resolve imported in
       (* let e = Coral.Init_func.run e in
        * let _imports = Coral.Import_resolution.resolve e in
        * let _ns = Coral.Name_resolution.resolve e in

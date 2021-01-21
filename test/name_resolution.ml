@@ -17,8 +17,7 @@ func main():
 |} in
   (match
      let%map.Result imports = Utils.parse_with_imports src in
-     let expr = imports.main in
-     Coral_passes.Name_resolution.resolve expr
+     Coral_passes.Name_resolution.resolve imports
   with
   | Ok names -> Coral_passes.Name_resolution.show names
   | Error e -> Stdio.print_endline @@ Frontend.show_parseError e);
