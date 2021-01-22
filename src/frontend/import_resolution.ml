@@ -25,6 +25,7 @@ module Imports = struct
   type t = {main: node; imports: node Map.M(NodeM).t}
 
   let add t key data = {t with imports= Map.set ~key ~data t.imports}
+  let get key {main; imports} = Map.find_exn imports key
 end
 
 let try_read_file path = try Some (Stdio.In_channel.read_all path) with _ -> None

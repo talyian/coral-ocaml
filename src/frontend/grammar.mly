@@ -144,7 +144,7 @@ expr
     | expr_atom COLON typedef { $1 }
     | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Make.import path [Coral_core.Ast.Module None] }
   | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN items=separated_list(COMMA, IDENTIFIER) RPAREN {
-                                                                                      Make.import path [Coral_core.Ast.All] }
+       Make.import path (Base.List.map ~f:(fun s -> Coral_core.Ast.ImpMember (s, None)) items) }
     | EXTERN LPAREN fftype=STRING COMMA name=STRING COMMA _type=typedef RPAREN {
         Make.extern fftype name _type  }
 

@@ -8,10 +8,11 @@ open Base
 
 (* Represents a thing you import:
  * import foo.bar.baz
+ * import foo.bar.baz as baz123
  * import foo.bar.baz (...)
  * import foo.bar.baz (alpha, Bravo as beta)
  *)
-type importType = Module of string option | All | Member of string * string option
+type importType = Module of string option | All | ImpMember of string * string option
 [@@deriving compare, sexp, show]
 
 (* module Info = struct

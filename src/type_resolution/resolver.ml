@@ -3,7 +3,7 @@
    In this version, we basically do compile-time evaluation, converting an Ast into a set of
    ccvalues. What's the difference between an Ast.node and a ccval? ccvals have types *)
 
-(* avoid being shadowed by Coral_core.Types *)
+(* evoid being shadowed by Coral_core.Types *)
 module Local_types = Types
 open Coral_core
 open Base
@@ -12,7 +12,10 @@ open Local_types
 type ccval = Ccval.t
 type cconst = Cconst.t
 
-module Resolver = struct end
+module Resolver(Name_resolution : sig type t val resolve :  = struct
+  type t =
+    { ns:
+end
 
 (* (\** A resolver is the data for a type resolution compilation pass. It follows name resolution (and
  *     relies on Name resolver ) and produces a map of Ast.Node -> ccval for later stages *\)

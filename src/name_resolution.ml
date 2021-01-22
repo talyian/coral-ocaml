@@ -23,15 +23,19 @@ end
 module NameTraversal = struct
   (* data for traversing an AST and building doing name resolution *)
   type t =
-    { refs: Ast.Node.t Map.M(Ast.Node).t (* a map from var nodes to its reference *)
+    { refs: Ast.Node.t Map.M(Ast.Node).t  (** a map from var nodes to its reference *)
     ; returns: Ast.Node.t Map.M(Ast.Node).t
-          (* A map from a return to the function it returns from *)
-    ; current_scope: Scope.t }
+          (** A map from a return to the function it returns from *)
+    ; members: Ast.Node.t Map.M(Names.Member).t
+    ; current_scope: Scope.t
+    ; global_scope: Scope.t  (** we start from this every time we parse a module *) }
 
   let empty () =
     { refs= Map.empty (module Ast.Node)
     ; returns= Map.empty (module Ast.Node)
-    ; current_scope= Scope.create () }
+    ; members= Map.empty (module Names.Member)
+    ; current_scope= Scope.create ()
+    ; global_scope= Scope.create () }
 end
 
 type t = NameTraversal.t
@@ -44,6 +48,35 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let reference = Scope.find ~name data.current_scope in
       let reference = Option.value_exn ~message:("Name not found: " ^ name) reference in
       {data with refs= Map.set data.refs ~key:node ~data:reference}
+  | Import {path; names; info} ->
+      let path_name = List.last_exn path in
+      let imported_module = Coral_frontend.Import_resolution.Imports.get node imports in
+      let imported_names =
+        let import_data = NameTraversal.empty () in
+        let import_data =
+          {import_data with current_scope= data.global_scope; global_scope= data.global_scope}
+        in
+        run import_data imported_module in
+      let scope = data.current_scope in
+      let scope =
+        List.fold ~init:scope
+          ~f:(fun scope imp ->
+            match imp with
+            | Ast.Module (Some module_name) -> Scope.add module_name imported_module scope
+            | Ast.Module None -> Scope.add path_name imported_module scope
+            | All -> scope (* TODO *)
+            | ImpMember (member, Some name) ->
+                let imported_member =
+                  Map.find_exn imported_names.members {Names.Member.expr= imported_module; member}
+                in
+                Scope.add name imported_member scope
+            | ImpMember (member, None) ->
+                let imported_member =
+                  Map.find_exn imported_names.members {Names.Member.expr= imported_module; member}
+                in
+                Scope.add member imported_member scope)
+          names in
+      {data with current_scope= scope}
   | Extern {binding= _; name; typ; info} ->
       let data = run data typ in
       let scope = Scope.add name node data.current_scope in
@@ -72,6 +105,18 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let data = {data with current_scope= outer_scope} in
       let scope = Scope.add name node data.current_scope in
       {data with current_scope= scope}
+  | Ast.Module {name; lines; info} ->
+      (* current_scope starts off in a global or outer scope, so make a new scope for this module *)
+      let data = {data with current_scope= Scope.nest data.current_scope} in
+      let data = Ast.fold_info ~init:data ~f:run node in
+      let data =
+        match data.current_scope with
+        | Scope {parents; names} ->
+            Map.fold names ~init:data ~f:(fun ~key ~data dd ->
+                let members =
+                  Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
+                {dd with members}) in
+      data
   | _ -> Ast.fold_info ~init:data ~f:run node
 
 let show n =
@@ -81,8 +126,10 @@ let show n =
 
 let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
 
-let resolve imports =
+let construct imports =
   let x = NameTraversal.empty () in
   run imports
-    {x with current_scope= default_global_scope}
+    {x with current_scope= default_global_scope; global_scope= default_global_scope}
     imports.Coral_frontend.Import_resolution.Imports.main
+
+let get_data (t : t) = {Names.names= t.refs; returns= t.returns; members= t.members}
