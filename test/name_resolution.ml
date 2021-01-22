@@ -21,29 +21,12 @@ func main():
   | Error e -> Stdio.print_endline @@ Frontend.show_parseError e);
   [%expect {|
     Names
-        [ref (Var {name = "foo"; info = ()})] -> ref (Func {name = "foo"; ret_type = None;
-           params =
-           [ref (Param {idx = 0; name = "world"; typ = None; info = ()})];
-           body =
-           ref (Call {callee = ref (Var {name = "printf"; info = ()});
-                  args =
-                  [ref (StringLiteral {literal = "Hello, %s\n"; info = ()});
-                    ref (Var {name = "world"; info = ()})];
-                  info = ()});
-           info = ()})
-        [ref (Var {name = "printf"; info = ()})] -> ref (Extern {binding = "c"; name = "printf";
-           typ =
-           ref (Call {
-                  callee =
-                  ref (Call {callee = ref (Var {name = "Func"; info = ()});
-                         args = []; info = ()});
-                  args =
-                  [ref (Call {callee = ref (Var {name = "Ptr"; info = ()});
-                          args = [ref (Var {name = "Uint8"; info = ()})];
-                          info = ()});
-                    ref (Var {name = "..."; info = ()})];
-                  info = ()});
-           info = ()})
-        [ref (Var {name = "target"; info = ()})] -> ref (Let {name = "target"; typ = None;
-           value = ref (StringLiteral {literal = "world"; info = ()}); info = ()})
-        [ref (Var {name = "world"; info = ()})] -> ref (Param {idx = 0; name = "world"; typ = None; info = ()}) |}]
+        [Var-...] -> Builtin-ELLIPSIS
+        [Var-Func] -> Builtin-FUNC
+        [Var-Ptr] -> Builtin-PTR
+        [Var-Uint64] -> Builtin-UINT64
+        [Var-Uint8] -> Builtin-UINT8
+        [Var-foo] -> Func-foo
+        [Var-printf] -> Extern-printf
+        [Var-target] -> Let-target
+        [Var-world] -> expr |}]

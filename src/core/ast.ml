@@ -67,6 +67,23 @@ module Node = struct
     and t1 = info t0
 
     and t = t1 ref
+
+    let rec show_short node =
+      let open Printf in
+      match !node with
+      | Extern {name; _} -> sprintf "Extern-%s" name
+      | Import {path; _} -> sprintf "Import-%s" (String.concat ~sep:"." path)
+      | Func {name; _} -> sprintf "Func-%s" name
+      | Module {name; _} -> sprintf "Module-%s" name
+      | Var {name; _} -> sprintf "Var-%s" name
+      | StringLiteral {literal; _} ->
+          sprintf "\"%s\"" (String.sub literal ~pos:0 ~len:(Int.min (String.length literal) 10))
+      | Builtin {builtin; _} -> sprintf "Builtin-%s" (Builtins.show builtin)
+      | Call {callee; _} -> sprintf "Call-%s" (show_short callee)
+      | Block _ -> "Block"
+      | Return {value; _} -> sprintf "Return-%s" (show_short value)
+      | Let {name; _} -> sprintf "Let-%s" name
+      | _ -> "expr"
   end
 
   include Node0

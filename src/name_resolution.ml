@@ -36,6 +36,13 @@ module NameTraversal = struct
     ; members= Map.empty (module Names.Member)
     ; current_scope= Scope.create ()
     ; global_scope= Scope.create () }
+
+  let merge data imported_names =
+    { data with
+      refs= Map.merge_skewed data.refs imported_names.refs ~combine:(fun ~key v1 v2 -> v1)
+    ; returns= Map.merge_skewed data.returns imported_names.returns ~combine:(fun ~key v1 v2 -> v1)
+    ; members= Map.merge_skewed data.members imported_names.members ~combine:(fun ~key v1 v2 -> v1)
+    }
 end
 
 type t = NameTraversal.t
@@ -57,6 +64,9 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
           {import_data with current_scope= data.global_scope; global_scope= data.global_scope}
         in
         run import_data imported_module in
+      (* todo: we can defer this by storing links to all imported modules instead of copying them
+         over *)
+      let data = NameTraversal.merge data imported_names in
       let scope = data.current_scope in
       let scope =
         List.fold ~init:scope
@@ -122,7 +132,7 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
 let show n =
   Stdio.printf "Names\n" ;
   Map.iteri n.NameTraversal.refs ~f:(fun ~key ~data ->
-      Stdio.printf "    [%s] -> %s\n" (Ast.show key) (Ast.show data))
+      Stdio.printf "    [%s] -> %s\n" (Ast.show_short key) (Ast.show_short data))
 
 let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
 

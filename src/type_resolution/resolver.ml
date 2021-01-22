@@ -12,10 +12,70 @@ open Local_types
 type ccval = Ccval.t
 type cconst = Cconst.t
 
-module Resolver(Name_resolution : sig type t val resolve :  = struct
-  type t =
-    { ns:
+module TypeSpec = struct
+  type t = Any | ConstStr of string | Const of Builtins.t | InstanceOf of t | TypeFor of t
+  [@@deriving show]
 end
+
+module Resolver = struct
+  type t = {ns: Coral_core.Names.t; types: TypeSpec.t Map.M(Ast).t}
+
+  let add t node type_spec = {t with types= Map.set t.types ~key:node ~data:type_spec}
+  let resolve t node = Map.find t.types node
+
+  let dump t =
+    Map.iteri t.types ~f:(fun ~key ~data ->
+        Stdio.printf "%s: %s\n" (Ast.show_short key) (TypeSpec.show data))
+end
+
+let rec construct1 ns (node : Ast.t) : Resolver.t =
+  let t = {Resolver.ns; types= Map.empty (module Ast)} in
+  construct t node
+
+and construct t node =
+  fst @@ check_type t @@ Option.value_exn (Names.deref_member t.ns node "main")
+
+and check_type t node : Resolver.t * TypeSpec.t =
+  (* memoized *)
+  match Resolver.resolve t node with
+  | Some type_spec -> (t, type_spec)
+  | None ->
+      let t, type_spec = check_type_raw t node in
+      let t = Resolver.add t node type_spec in
+      (t, type_spec)
+
+and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
+  match !node with
+  | Ast.Func {name; ret_type; params; body; info} -> check_type t body
+  | Ast.Block {items; _} ->
+      let t, item_types = List.fold_map ~init:t ~f:check_type items in
+      (t, TypeSpec.Const Builtins.VOID)
+  | Ast.Let {name; typ; value; _} ->
+      let t = check_type t value in
+      t
+  | Ast.StringLiteral _ -> (t, TypeSpec.Const Builtins.STR)
+  | Ast.Call {callee; args; _} ->
+      let t, callee_type = check_type t callee in
+      let t, args_types = List.fold_map ~init:t ~f:check_type args in
+      (t, callee_type)
+  | Ast.Extern {name; typ; _} ->
+      let t, typ_type = check_type t typ in
+      (t, typ_type)
+  | Ast.Var {name; _} ->
+      let reference =
+        Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in
+      let t = check_type t reference in
+      t
+  | Ast.Builtin {builtin; _} -> (t, TypeSpec.Const builtin)
+  | Ast.Param {idx; name; typ; _} -> (
+    match typ with
+    | Some typ ->
+        let t, typ_type = check_type t typ in
+        (t, typ_type)
+    | None -> (t, TypeSpec.Any) )
+  | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
+
+let construct = construct1
 
 (* (\** A resolver is the data for a type resolution compilation pass. It follows name resolution (and
  *     relies on Name resolver ) and produces a map of Ast.Node -> ccval for later stages *\)
