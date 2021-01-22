@@ -29,4 +29,4 @@ func main():
         [Var-foo] -> Func-foo
         [Var-printf] -> Extern-printf
         [Var-target] -> Let-target
-        [Var-world] -> expr |}]
+        [Var-world] -> Param-world |}]

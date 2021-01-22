@@ -23,17 +23,16 @@ func main():
     Coral_types.Resolver.Resolver.dump types
   | Error e -> Stdio.print_endline @@ Frontend.show_parseError e);
   [%expect {|
-    Call-Call-Var-Func: (Resolver.TypeSpec.Const FUNC)
-    Call-Var-Func: (Resolver.TypeSpec.Const FUNC)
-    Call-Var-Ptr: (Resolver.TypeSpec.Const PTR)
-    Call-Var-foo: (Resolver.TypeSpec.Const FUNC)
-    Call-Var-printf: (Resolver.TypeSpec.Const FUNC)
+    Call-Func: (Resolver.TypeSpec.Const FUNC)
+    Call-Func: (Resolver.TypeSpec.Const FUNC)
+    Call-Ptr: (Resolver.TypeSpec.Const PTR)
+    Call-foo: (Resolver.TypeSpec.Const FUNC)
+    Call-printf: (Resolver.TypeSpec.Const FUNC)
     Extern-printf: (Resolver.TypeSpec.Const FUNC)
     Func-foo: (Resolver.TypeSpec.Const FUNC)
     Func-main: (Resolver.TypeSpec.Const VOID)
-    expr: Resolver.TypeSpec.Any
-    "Hello, %s
-    ": (Resolver.TypeSpec.Const STR)
+    Param-world: Resolver.TypeSpec.Any
+    "Hello, %s\n": (Resolver.TypeSpec.Const STR)
     "world": (Resolver.TypeSpec.Const STR)
     Var-...: (Resolver.TypeSpec.Const ELLIPSIS)
     Var-Func: (Resolver.TypeSpec.Const FUNC)

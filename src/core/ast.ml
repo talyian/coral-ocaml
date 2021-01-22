@@ -68,22 +68,42 @@ module Node = struct
 
     and t = t1 ref
 
-    let rec show_short node =
+    let show_short node =
       let open Printf in
+      let rec name_of node =
+        match !node with
+        | Extern {name; _} | Func {name; _} | Module {name; _} | Var {name; _} | Let {name; _} ->
+            name
+        | Import {path; _} -> String.concat ~sep:"." path
+        | StringLiteral {literal; _} ->
+            sprintf "\"%s\"" (String.sub literal ~pos:0 ~len:(Int.min (String.length literal) 10))
+        | Builtin {builtin; _} -> Builtins.show builtin
+        | Call {callee; _} -> name_of callee
+        | Block _ -> ""
+        | Param {name; _} -> name
+        | Return {value; _} -> name_of value
+        | _ -> "EXPR"
+      and type_name_of node =
+        match !node with
+        | Extern _ -> "Extern"
+        | Import _ -> "Import"
+        | Module _ -> "Module"
+        | Let _ -> "Let"
+        | Block _ -> "Block"
+        | Func _ -> "Func"
+        | Var _ -> "Var"
+        | Builtin _ -> "Builtin"
+        | Call _ -> "Call"
+        | Binop _ -> "Binop"
+        | Param _ -> "Param"
+        | _ -> "expr" in
       match !node with
-      | Extern {name; _} -> sprintf "Extern-%s" name
-      | Import {path; _} -> sprintf "Import-%s" (String.concat ~sep:"." path)
-      | Func {name; _} -> sprintf "Func-%s" name
-      | Module {name; _} -> sprintf "Module-%s" name
-      | Var {name; _} -> sprintf "Var-%s" name
-      | StringLiteral {literal; _} ->
-          sprintf "\"%s\"" (String.sub literal ~pos:0 ~len:(Int.min (String.length literal) 10))
-      | Builtin {builtin; _} -> sprintf "Builtin-%s" (Builtins.show builtin)
-      | Call {callee; _} -> sprintf "Call-%s" (show_short callee)
       | Block _ -> "Block"
-      | Return {value; _} -> sprintf "Return-%s" (show_short value)
-      | Let {name; _} -> sprintf "Let-%s" name
-      | _ -> "expr"
+      | StringLiteral {literal; _} ->
+          let literal = String.sub literal ~pos:0 ~len:(Int.min (String.length literal) 10) in
+          let literal = String.escaped literal in
+          sprintf "\"%s\"" literal
+      | _ -> type_name_of node ^ "-" ^ name_of node
   end
 
   include Node0
