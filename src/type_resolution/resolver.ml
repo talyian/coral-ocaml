@@ -4,17 +4,18 @@
    ccvalues. What's the difference between an Ast.node and a ccval? ccvals have types *)
 
 (* evoid being shadowed by Coral_core.Types *)
-module Local_types = Types
 open Coral_core
 open Base
-open Local_types
-
-type ccval = Ccval.t
-type cconst = Cconst.t
 
 module TypeSpec = struct
-  type t = Any | ConstStr of string | Const of Builtins.t | InstanceOf of t | TypeFor of t
-  [@@deriving show]
+  type t =
+    | Any
+    | ConstStr of string
+    | Const of Builtins.t
+    | InstanceOf of t
+    | TypeFor of t
+    | Applied of t * t list
+  [@@deriving show {with_path= false}]
 end
 
 module Resolver = struct
@@ -28,12 +29,10 @@ module Resolver = struct
         Stdio.printf "%s: %s\n" (Ast.show_short key) (TypeSpec.show data))
 end
 
-let rec construct1 ns (node : Ast.t) : Resolver.t =
+let rec construct ns (node : Ast.t) : Resolver.t =
   let t = {Resolver.ns; types= Map.empty (module Ast)} in
-  construct t node
-
-and construct t node =
-  fst @@ check_type t @@ Option.value_exn (Names.deref_member t.ns node "main")
+  fst @@ check_type t
+  @@ Option.value_exn ~message:"Main func not found" (Names.deref_member t.ns node "main")
 
 and check_type t node : Resolver.t * TypeSpec.t =
   (* memoized *)
@@ -46,7 +45,12 @@ and check_type t node : Resolver.t * TypeSpec.t =
 
 and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
   match !node with
-  | Ast.Func {name; ret_type; params; body; info} -> check_type t body
+  | Ast.Func {name; ret_type; params; body; info} ->
+      let t, param_types = List.fold_map ~init:t ~f:check_type params in
+      let t, body_type = check_type t body in
+      let func_type =
+        TypeSpec.(Applied (Applied (Const Builtins.FUNC, [body_type]), param_types)) in
+      (t, func_type)
   | Ast.Block {items; _} ->
       let t, item_types = List.fold_map ~init:t ~f:check_type items in
       (t, TypeSpec.Const Builtins.VOID)
@@ -54,10 +58,29 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
       let t = check_type t value in
       t
   | Ast.StringLiteral _ -> (t, TypeSpec.Const Builtins.STR)
-  | Ast.Call {callee; args; _} ->
+  | Ast.IntLiteral _ -> (t, TypeSpec.Const Builtins.INT64)
+  | Ast.FloatLiteral _ -> (t, TypeSpec.Const Builtins.FLOAT64)
+  | Ast.Call {callee; args= [{contents= Ast.List {items= args; _}}]; _}
+   |Ast.Index {callee; args; _}
+   |Ast.Call {callee; args; _} ->
       let t, callee_type = check_type t callee in
       let t, args_types = List.fold_map ~init:t ~f:check_type args in
-      (t, callee_type)
+      let typ =
+        TypeSpec.(
+          match Applied (callee_type, args_types) with
+          | Applied (Applied (Applied (Const Builtins.FUNC, return), params), args) ->
+              Stdio.printf "call of func type:\n  %s\n  %s\n  %s\n"
+                (List.map ~f:show return |> String.concat ~sep:"; ")
+                (List.map ~f:show params |> String.concat ~sep:"; ")
+                (List.map ~f:show args |> String.concat ~sep:"; ") ;
+              let return_type =
+                match return with
+                | [] -> Const Builtins.VOID
+                | [x] -> x
+                | items -> Applied (Const Builtins.TUPLE, items) in
+              return_type
+          | x -> x) in
+      (t, typ)
   | Ast.Extern {name; typ; _} ->
       let t, typ_type = check_type t typ in
       (t, typ_type)
@@ -73,9 +96,8 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
         let t, typ_type = check_type t typ in
         (t, typ_type)
     | None -> (t, TypeSpec.Any) )
+  | Ast.Tuple {items= []; _} -> (t, TypeSpec.Const Builtins.VOID)
   | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
-
-let construct = construct1
 
 (* (\** A resolver is the data for a type resolution compilation pass. It follows name resolution (and
  *     relies on Name resolver ) and produces a map of Ast.Node -> ccval for later stages *\)

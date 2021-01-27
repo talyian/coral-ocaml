@@ -17,6 +17,8 @@ let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> '
   |> f "Int8" @@ builtin @@ INT8
   |> f "Int32" @@ builtin @@ INT32
   |> f "Int64" @@ builtin @@ INT64
+  |> f "IntSize" @@ builtin @@ INTNATIVE
+  |> f "UintSize" @@ builtin @@ INTNATIVE
   |> f "Float64" @@ builtin @@ FLOAT64
   |> f "Void" @@ builtin @@ VOID
   |> f "Ptr" @@ builtin @@ PTR

@@ -1,8 +1,10 @@
 # ctypes
 type IntSize = Int64
-type Cstr = Str
-func strlen: IntSize(s: Cstr)
+type Cstr = Ptr[Uint8]
 type FilePtr = Ptr
+
+
+extern("c", "strlen", Func[IntSize][Cstr])
 
 
 # unixio

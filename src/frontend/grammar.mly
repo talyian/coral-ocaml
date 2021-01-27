@@ -123,6 +123,7 @@ expr_op_unit
     | callee=expr_op_unit arg=expr_atom {
         match !arg with
         | Node.Tuple {items=args;_} -> Make.callNode callee args
+        | Node.List {items=args;_} -> Make.index callee args
         | _ -> Make.callNode callee [arg] }
 
 binary_op_expr
@@ -175,9 +176,12 @@ member
       { Make.member base member }
 
 type_definition
-    : TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE separated_list_trailing(SEMICOLON, typedecl_field) RBRACE { Make.empty }
-    | TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE RBRACE { Make.empty }
-    | TYPE _name=IDENTIFIER EQ typedef { Make.empty }
+    : TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE items=separated_list_trailing(SEMICOLON, typedecl_field) RBRACE
+       { Make.typeDecl _name _metatype items  }
+    | TYPE _name=IDENTIFIER EQ _metatype=IDENTIFIER LBRACE RBRACE
+       { Make.typeDecl _name _metatype [] }
+    | TYPE _name=IDENTIFIER EQ t=typedef { Make.typeAlias _name t }
+
 (* Like separated_list, but we can accept a trailing delimiter as well.  Not
    sure how to write this; the simple pattern "separated_list(S, X) S?" doesn't
    work because by the time the S gets shifted, you're already in a

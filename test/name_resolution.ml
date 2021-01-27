@@ -22,6 +22,7 @@ func main():
   [%expect {|
     Names
         [Var-...] -> Builtin-ELLIPSIS
+        [Var-Cstr] -> Let-Cstr
         [Var-Func] -> Builtin-FUNC
         [Var-Ptr] -> Builtin-PTR
         [Var-Uint64] -> Builtin-UINT64

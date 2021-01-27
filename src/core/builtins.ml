@@ -59,6 +59,7 @@ type t =
   | PTR
   | FUNC
   | VARFUNC
+  | TUPLE
   | ELLIPSIS
   (* intrinsics *)
   (* custom *)

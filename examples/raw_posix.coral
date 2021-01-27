@@ -1,10 +1,3 @@
-type ssize_t = IntSize
-type size_t = UintSize
-type int = Int32
-type void = Unit
-type voidptr = Ptr[void]
-type char = Uint8
-
 type Flags = c_enum {
   # One of the following three must be provided
   # O_RDONLY = 0;
@@ -29,8 +22,8 @@ type Flags = c_enum {
   # O_TRUNC;
 }
 
-type Fd = int
-extern("c", "open", Func[Fd][pathname:Ptr[char], flags:Flags]) # returns -1 on error and sets errno
-extern("c", "close", Func[int][Fd]) # returns SUCCESS=0,  -1 on error and sets errno,
-extern("c", "read", Func[ssize_t][Fd, buf:voidptr, count:size_t]) # returns num bytes read, 0 = eof, -1 on error and sets errno
+type Fd = struct { val:Int32 }
+extern("c", "open", Func[Fd][pathname:Ptr[Uint8], flags:Flags]) # returns -1 on error and sets errno
+extern("c", "close", Func[Int32][Fd]) # returns SUCCESS=0,  -1 on error and sets errno,
+extern("c", "read", Func[IntSize][Fd, buf:Ptr[Uint8], count:UintSize]) # returns num bytes read, 0 = eof, -1 on error and sets errno
 extern("c", "dup", Func[Fd][Fd]) # returns -1 on error and sets errno

@@ -127,6 +127,13 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
                   Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
                 {dd with members}) in
       data
+  | Ast.Type {typ; info} ->
+      Ast.show typ |> Stdio.print_endline ;
+      Caml.exit 0
+  | Ast.TypeDecl {name; metatype; fields; _} ->
+      {data with current_scope= Scope.add name node data.current_scope}
+  | Ast.TypeAlias {name; typ; _} ->
+      {data with current_scope= Scope.add name node data.current_scope}
   | _ -> Ast.fold_info ~init:data ~f:run node
 
 let show n =

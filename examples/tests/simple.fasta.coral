@@ -1,0 +1,10 @@
+import process
+import raw_clib
+
+func main():
+  let i = 0
+  # TODO
+  while i < process.args.length:
+    raw_clib.printf("Arg [%d]: \"%s\"\n", i, process.args[i])
+  # TODO implicit returns
+  return ()

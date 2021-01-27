@@ -1,4 +1,31 @@
-let alu = (
+import process
+import sync_io(print, put_byte)
+
+func repeatFasta(n, src):
+  for i in range n:
+    put_byte src[i % length src]
+    if i % 60 = 0: put_byte '\n'
+  if n % 60: put_byte '\n'
+
+func random(n):
+  set seed = (seed * 3877 + 29573) % 138868
+  seed * n / 138868
+
+func randomFasta(n, table):
+  table = table.fold(0.0, func (p, (a, b)): (p + b, (a, p + b)))
+  for i in range n:
+    let r = random 1.0
+    for (a, b) in table:
+      if b < random:
+        put_byte a
+        break
+    if i % 60 = 0: put_byte '\n'
+  if n % 60: put_byte '\n'
+
+let n = i32(process.argv[1])
+
+print ">ONE Homo sapiens alu"
+repeatFasta(n * 2,
    "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG" +
    "GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA" +
    "CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT" +
@@ -7,57 +34,16 @@ let alu = (
    "AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC" +
    "AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA")
 
-let iub = [
+print ">TWO IUB ambiguity codes"
+randomFasta(n * 3, [
     ('a', 0.27), ('c', 0.12), ('g', 0.12), ('t', 0.27),
     ('B', 0.02), ('D', 0.02), ('H', 0.02), ('K', 0.02),
     ('M', 0.02), ('N', 0.02), ('R', 0.02), ('S', 0.02),
-    ('V', 0.02), ('W', 0.02), ('Y', 0.02)]
+    ('V', 0.02), ('W', 0.02), ('Y', 0.02)])
 
-let homo = [
+print ">THREE Homo sapiens frequency"
+randomFasta(n * 5 ,[
     ('a', 0.3029549426680),
     ('c', 0.1979883004921),
     ('g', 0.1975473066391),
-    ('t', 0.3015094502008)]
-
-let seed = i32 42
-let ia = i32 3877
-let ic = i32 29573
-let im = i32 138868
-
-func random():
-    seed = (seed * ia + ic) % im
-    return seed / f32 im
-
-let width = 60
-func repeatFasta(src, n):
-    for (row) in range(n // width):
-        start = row * width % src.length()
-        print src.slice(start, start + width)
-    if n % width:
-        print src.slice(n // width * width, n)
-
-func randomFasta(freq, n):
-    let keys = []
-    let vals = []
-    let total = 0
-    for (prob, c) in freq:
-        set total += prob
-        keys.push total
-        vals.push c
-    for (row) in range(n // width):
-        for (i) in range width:
-           stdout.write(vals[keys.bisect_index(random())])
-        stdout.write '\n'
-    if n % width:
-        for (i) in range (n % width):
-           stdout.write(vals[keys.bisect_index(random())])
-        stdout.write '\n'
-
-print ">ONE Homo sapiens alu"
-repeat(alu, n * 2)
-
-print ">TWO IUB ambiguity codes"
-random(iub, n * 3)
-
-print ">THREE Homo sapiens frequency"
-random(homo, n * 5)
+    ('t', 0.3015094502008)])
