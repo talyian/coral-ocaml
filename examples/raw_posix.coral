@@ -1,27 +1,28 @@
-type Flags = c_enum {
-  # One of the following three must be provided
-  # O_RDONLY = 0;
-  # O_WRONLY = 1;
-  # O_RDWR = 2;
-  # # Zero or more of the following can be provided
-  # O_APPEND;
-  # O_ASYNC;
-  # O_CLOEXEC;
-  # O_CREAT;
-  # O_DIRECT;
-  # O_DIRECTORY;
-  # O_EXCL;
-  # O_LARGEFILE;
-  # O_NOATIME;
-  # O_NOCTTY;
-  # O_NOFOLLOW;
-  # O_NONBLOCK;
-  # O_PATH;
-  # O_SYNC;
-  # O_TMPFILE;
-  # O_TRUNC;
-}
+# type Flags = c_enum {
+#   # One of the following three must be provided
+#   O_RDONLY,
+#   O_WRONLY,
+#   O_RDWR,
+#   # # Zero or more of the following can be provided
+#   # O_APPEND;
+#   # O_ASYNC;
+#   # O_CLOEXEC;
+#   # O_CREAT;
+#   # O_DIRECT;
+#   # O_DIRECTORY;
+#   # O_EXCL;
+#   # O_LARGEFILE;
+#   # O_NOATIME;
+#   # O_NOCTTY;
+#   # O_NOFOLLOW;
+#   # O_NONBLOCK;
+#   # O_PATH;
+#   # O_SYNC;
+#   # O_TMPFILE;
+#   # O_TRUNC;
+# }
 
+type Flags = Int32
 type Fd = struct { val:Int32 }
 extern("c", "open", Func[Fd][pathname:Ptr[Uint8], flags:Flags]) # returns -1 on error and sets errno
 extern("c", "close", Func[Int32][Fd]) # returns SUCCESS=0,  -1 on error and sets errno,

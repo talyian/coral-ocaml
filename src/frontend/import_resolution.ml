@@ -42,13 +42,18 @@ let resolve ~(parse_func : parse_function_t) ~(src : string) =
     let filename = String.concat ~sep:"/" path ^ ".coral" in
     let rec find_result = function
       | [] -> Or_error.error_string ("file not found: " ^ filename)
-      | path :: rest ->
-          let full_path = path ^ "/" ^ filename in
+      | found_path :: rest ->
+          let full_path = found_path ^ "/" ^ filename in
           if Caml.Sys.file_exists full_path then
             Stdio.In_channel.read_all full_path
             |> parse_func
             |> Result.map_error ~f:(fun e -> Error.of_string @@ Frontend.show_parseError e)
-            |> Result.map ~f:(fun expr -> {Imports.full_path; expr})
+            |> Result.map ~f:(fun expr ->
+                   { Imports.full_path
+                   ; expr=
+                       ( match !expr with
+                       | Ast.Module m -> ref @@ Ast.Module {m with name= List.last_exn path}
+                       | _ -> expr ) })
           else find_result rest in
     find_result ["../../../examples/"; "../../../examples/stdlib/"] in
   (* To run import resolution, we start from the main file and run load_import recursively against

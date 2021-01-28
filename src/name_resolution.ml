@@ -115,6 +115,9 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let data = {data with current_scope= outer_scope} in
       let scope = Scope.add name node data.current_scope in
       {data with current_scope= scope}
+  | Member {base; member; info} ->
+      let data = run data base in
+      data
   | Ast.Module {name; lines; info} ->
       (* current_scope starts off in a global or outer scope, so make a new scope for this module *)
       let data = {data with current_scope= Scope.nest data.current_scope} in
@@ -139,7 +142,10 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
 let show n =
   Stdio.printf "Names\n" ;
   Map.iteri n.NameTraversal.refs ~f:(fun ~key ~data ->
-      Stdio.printf "    [%s] -> %s\n" (Ast.show_short key) (Ast.show_short data))
+      Stdio.printf "    [%s] -> %s\n" (Ast.show_short key) (Ast.show_short data)) ;
+  Stdio.printf "Names.members\n" ;
+  Map.iteri n.NameTraversal.members ~f:(fun ~key ~data ->
+      Stdio.printf "    [%s.%s] -> %s\n" (Ast.show_short key.expr) key.member (Ast.show_short data))
 
 let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
 

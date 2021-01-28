@@ -30,4 +30,12 @@ func main():
         [Var-foo] -> Func-foo
         [Var-printf] -> Extern-printf
         [Var-target] -> Let-target
-        [Var-world] -> Param-world |}]
+        [Var-world] -> Param-world
+    Names.members
+        [Module.().foo] -> Func-foo
+        [Module.().main] -> Func-main
+        [Module.().printf] -> Extern-printf
+        [raw_clib.Cstr] -> Let-Cstr
+        [raw_clib.free] -> Extern-free
+        [raw_clib.malloc] -> Extern-malloc
+        [raw_clib.printf] -> Extern-printf |}]

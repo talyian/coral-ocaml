@@ -105,6 +105,7 @@ module Node = struct
         | Param _ -> "Param"
         | _ -> "expr" in
       match !node with
+      | Module {name; info; _} -> ( match name with "" -> "Module." ^ Info.show info | n -> n )
       | Block _ -> "Block"
       | Tuple {items; _} -> "(" ^ (String.concat ~sep:", " @@ List.map ~f:show_short items) ^ ")"
       | StringLiteral {literal; _} ->
