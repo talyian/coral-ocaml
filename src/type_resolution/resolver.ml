@@ -7,6 +7,21 @@
 open Coral_core
 open Base
 
+let show_table list =
+  let lengths = List.init ~f:(Fn.const 0) (List.length @@ List.hd_exn list) in
+  let lengths =
+    List.fold ~init:lengths
+      ~f:(fun lengths row ->
+        List.zip_exn lengths row |> List.map ~f:(fun (a, b) -> max a (String.length b)))
+      list in
+  (List.iter
+     ~f:(fun row ->
+       List.iteri row ~f:(fun i cell ->
+           Stdio.print_string
+           @@ String.prefix (cell ^ String.make 100 ' ') (1 + List.nth_exn lengths i)) ;
+       Stdio.print_endline "")
+     list [@warning "-8"])
+
 module TypeSpec = struct
   type t =
     | Any
@@ -15,7 +30,16 @@ module TypeSpec = struct
     | InstanceOf of t
     | TypeFor of t
     | Applied of t * t list
-  [@@deriving show {with_path= false}]
+    | And of t * t
+
+  let rec show = function
+    | Any -> "*"
+    | ConstStr s -> s
+    | Const b -> Builtins.show b
+    | InstanceOf t -> "::" ^ show t
+    | TypeFor t -> "@@" ^ show t
+    | Applied (a, b) -> show a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
+    | And (a, b) -> show a ^ " and " ^ show b
 end
 
 module Resolver = struct
@@ -25,8 +49,8 @@ module Resolver = struct
   let resolve t node = Map.find t.types node
 
   let dump t =
-    Map.iteri t.types ~f:(fun ~key ~data ->
-        Stdio.printf "%s: %s\n" (Ast.show_short key) (TypeSpec.show data))
+    Map.mapi t.types ~f:(fun ~key ~data -> [Ast.show_short key; TypeSpec.show data])
+    |> Map.to_alist |> List.map ~f:snd |> show_table
 end
 
 let rec construct ns (node : Ast.t) : Resolver.t =
@@ -53,13 +77,13 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
       (t, func_type)
   | Ast.Block {items; _} ->
       let t, item_types = List.fold_map ~init:t ~f:check_type items in
-      (t, TypeSpec.Const Builtins.VOID)
+      (t, TypeSpec.(InstanceOf (Const Builtins.VOID)))
   | Ast.Let {name; typ; value; _} ->
       let t = check_type t value in
       t
-  | Ast.StringLiteral _ -> (t, TypeSpec.Const Builtins.STR)
-  | Ast.IntLiteral _ -> (t, TypeSpec.Const Builtins.INT64)
-  | Ast.FloatLiteral _ -> (t, TypeSpec.Const Builtins.FLOAT64)
+  | Ast.StringLiteral _ -> TypeSpec.(t, InstanceOf (Const Builtins.STR))
+  | Ast.IntLiteral _ -> TypeSpec.(t, InstanceOf (Const Builtins.INT64))
+  | Ast.FloatLiteral _ -> TypeSpec.(t, InstanceOf (Const Builtins.FLOAT64))
   | Ast.Call {callee; args= [{contents= Ast.List {items= args; _}}]; _}
    |Ast.Index {callee; args; _}
    |Ast.Call {callee; args; _} ->
@@ -73,6 +97,7 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
                 (List.map ~f:show return |> String.concat ~sep:"; ")
                 (List.map ~f:show params |> String.concat ~sep:"; ")
                 (List.map ~f:show args |> String.concat ~sep:"; ") ;
+              Stdio.printf "TODO: unify args and params\n" ;
               let return_type =
                 match return with
                 | [] -> Const Builtins.VOID
@@ -91,6 +116,8 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
           ~message:("Member reference not found: " ^ Ast.show node)
           (Names.deref_member t.ns base member) in
       check_type t member_expr
+  | Ast.TypeAlias {name; typ; info} -> check_type t typ
+  | Ast.TypeDecl {name; metatype; fields; info} -> (t, TypeSpec.ConstStr name)
   | Ast.Var {name; _} ->
       let reference =
         Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in
@@ -101,7 +128,7 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
     match typ with
     | Some typ ->
         let t, typ_type = check_type t typ in
-        (t, typ_type)
+        TypeSpec.(t, InstanceOf typ_type)
     | None -> (t, TypeSpec.Any) )
   | Ast.Tuple {items= []; _} -> (t, TypeSpec.Const Builtins.VOID)
   | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
