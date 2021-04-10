@@ -6,7 +6,7 @@ module Make = Coral_core.Ast.Make
 %token <string> INTEGER
 %token <string> FLOAT
 %token <string> OPERATOR OPERADD OPERMUL OPERCMP
-%token <string> IDENTIFIER STRING
+%token <string> IDENTIFIER STRING ATTRIBUTE_NAME
 %token <char> CHAR
 %token <int> NEWLINE
 %token FUNC IF ELSE ELIF FOR IN RETURN LET SET IMPORT EXTERN
@@ -53,6 +53,8 @@ line
 | RETURN { Make.returnNode @@ Make.tuple [] }
 | e=expr { e }
 | e=forexpr {e}
+| ATTRIBUTE_NAME line { Make.attribute $1 [] $2 }
+| ATTRIBUTE_NAME NEWLINE line { Make.attribute $1 [] $3 }
 
 terminated_line
 : line NEWLINE { $1 }

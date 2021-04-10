@@ -1,0 +1,182 @@
+
+type Pat[C][Pattern] = union {
+   Literal : C;
+   Range: (C * C);
+   Seq : Pattern[C] * Pattern[C];
+   Or  : Pattern[C] * Pattern[C];
+   Star : Pattern[C];
+   Empty;
+   Error;
+}
+
+type BasicPattern[C] = Pat[C][BasicPattern]
+
+type AdvancedPattern = Pattern[Char][AdvancedPattern] | union {
+   Optional: AdvancedPattern[Char];
+   Plus: AdvancedPattern[Char];
+   Repeat: struct { pattern:AdvancedPattern[C]; min:Uint32; max:Uint32 };
+   Class: struct { name: String };
+}
+
+let nullable (pattern:BasicPattern[C]) =
+  match pattern:
+    Literal _: false
+    Range _: false
+    Seq (a, b): nullable a && nullable b
+    Or (a, b):  nullable a || nullable b
+    Star _: true
+    Empty: true
+    Error: false
+
+let deriv x (pattern:BasicPattern[C]) : BasicPattern[_] =
+  match pattern:
+    Empty: Error
+    Literal(c) when c = x: Empty
+    Range(a, b) when a <= c && c < b: Empty
+    Literal(c): Error
+    Range(a, b): Error
+    Error: Error
+    Star a: Seq(deriv x a, Star a)
+    Or(a, b): Or(deriv x a, deriv x b)
+    Seq(a, b):
+      if nullable a: Or(Seq(deriv x a, b), deriv x b)
+      else: Seq(deriv x a, b)
+
+# Convert an advanced pattern to a basic pattern
+let rec toBasicPattern advanced =
+   match advanced:
+     Repeat {pattern; min; max}:
+       if min > 0:
+         Seq(pattern, toBasicPattern(Repeat {pattern; min=min - 1; max - 1})
+       else if max > 0:
+         Or(Empty, toBasicPattern(Repeat {pattern; min=0; max= max - 1}))
+       else:
+         Empty
+     Plus inner: Seq(inner, Star inner)
+     Class "w": Or(Literal ' ', Or(Literal '\t', Literal '\n'))
+     Class "b": # TODO
+
+# Convert a char pattern to a byte pattern
+let map f = match:
+   Literal c : f c
+   Range(a, b): # TODO: this could be optimized I guess
+     ors_range(a, b) |> map f |> opt_or
+   Seq(a, b): Seq(f a, f b)
+   Or(a, b): Or(f a, f b)
+   Star x: Star(f x)
+   Empty: Empty
+   Error: Error
+
+module DfaTable:
+   type DfaState = struct {
+      terminal: Bool;
+      error: Bool;
+      transitions: Array[256, Uint32]
+   }
+
+   let build_table initial_pattern =
+      let patterns = List[Pattern[Char]]()
+      let states = List[DfaState]()
+      # find the index of the pattern in the patterns table, so we deduplicate
+      # repeated patterns. For now we just linearly search, but this could
+      # easily be adapted with a map from known patterns to indices.
+      let find_or_upsert pattern =
+         for i in range(patterns.length):
+           if patterns[i] = pattern:
+             return i
+         patterns.push pattern
+         states.push {terminal = nullable pattern; error=false; transitions=zero}
+      # the state table always has at least two states: initial and error
+      find_or_upsert Error
+      find_or_upsert initial_pattern
+      let i = 0
+      while i < patterns.length:
+         let new_state = DfaData {
+            terminal = nullable patterns[i];
+            error = false;
+            transitions = Array.create 256
+         }
+         for i in range(256):
+           new_state.transitions[i] = find_or_upsert (deriv c patterns[i])
+      states
+
+   let execute table state string i =
+     while true:
+        if i >= string.length(): return Done
+        let next_state = table[state].transitions[string[i]]
+        if next_state.error: return Error
+        if next_state.terminal: return Done
+        state = next_state
+
+  # is this actually faster than just interpreting the table in the `execute` function?
+  #
+  let dfa_in_code =
+    switch state:
+      case 0: return Error
+      case 1:
+         if c = 'f': goto case 2
+         goto case 0
+      case 2:
+         if c = ' ': goto case 3
+         goto case 0
+      case 3:
+         if c = five: goto case 4
+         else if c = six: goto case 4
+         else if c = seven: goto case 4
+         else: goto case 0
+      case 4:
+         if c = ' ': goto case 5
+         else: goto case 0
+      case 5:
+         return SUCCESS
+
+[@test "regex execution"]
+do:
+  # Test that a regex on chars works on a sequence of chars
+  # and a regex on bytes works on a sequence of bytes
+  # and that they produce the same result
+  let test_execute pattern (string) =
+     let char_automaton = pattern |> toBasicPattern |> build_table
+     let byte_automaton = pattern |> toBasicPattern |> map char_to_utf8 |> build_table
+     let byte_string = string.collect char_to_utf8
+
+     match execute char_automaton string, execute byte_automaton byte_string:
+        Success _, Success _: printf "pass"
+        Fail, Fail: printf "fail"
+        _: printf "byte and char automatons disagree"
+
+   let pattern = parse "five (五 |六 |七 )*six seven"
+   test_execute pattern "five six seven"; expect "pass"
+   test_execute pattern "five 五 six seven"; expect "pass"
+   test_execute pattern "five 五 五 six seven"; expect "pass"
+   test_execute pattern "five 六 五 六 six seven"; expect "pass"
+   test_execute pattern "five five six seven"; expect "fail"
+   test_execute pattern "five six 五 seven"; expect "fail"
+[@test "lexer - longest match"]
+do:
+    "\w+-\d+"
+    "\w+"
+    "abc" -> "word"
+    "abc-abc" -> "word" "-" "word"
+    "abc-123" -> "word0"
+
+[@test "lexer"]
+do:
+   type Token = union {
+     Int: Int64;
+     Float: Float64;
+     Identifier: String;
+     StringLiteral: String;
+     Operator: String
+   }
+   let lexer = Lexer:
+     match pattern with
+       "\d+": yield Token.Int(parse_int32 yytext)
+       "\d+\.\d+": yield Token.Float(parse_float32 yytext)
+       "\w+": yield Token.Identifier(yytext)
+       "(": yield Token.LParen
+       ")": yield Token.RParen
+       "\"([^\\\"]|\\r|\\n|\\t|\\x[0-9a-fA-F][0-9a-fA-F]\\\")\"": yield Token.StringLiteral(yytext)
+   for token in lexer.lex "(foo + (bar * qux))":
+      print token
+   expect R"`(LParen, Identifier 'foo', Symbol '+', LParen, Identifier 'bar', Symbol '*', Identifier 'qux', RParen, RParen)`"

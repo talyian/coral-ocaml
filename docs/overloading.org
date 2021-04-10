@@ -1,0 +1,91 @@
+* Overloading / Ad-hoc Polymorphism
+
+It's nice to be able to be able to provide type-specific implementations of
+functions and operators and have compile-time type-driven impl resolution:
+
+  # overloaded addition
+  let c = 1 + 2
+  let d = "1" + "2"
+  # overloaded functions
+  print 1
+  print "2"
+
+** How to declare overloaded functions?
+
+*** Option 1: functions always overload.
+
+  This seems a bit error prone, but we could have a function definition always overload.
+
+#+BEGIN_SRC coral
+   func foo(a): b
+   func foo(c): d # what if c is the same type as a? what if C is a subtype/supertype of a?
+
+   module B:
+     func foo(e): f # does foo(e) override <parent module>.foo?
+   module C:
+     func foo(g): h # pretty sure B.foo isn't a valid overload
+     import B { foo } # is B.foo actually an overload set for foo(a)/foo(c)/B.foo?
+     func foo(i): j # is B.foo now a valid overload? do imports add to overloads?
+#+END_SRC
+
+   Advantages: ??
+   Disadvantages:
+     - cannot override existing impls, so ~e~ can never be a subtype of ~a~
+     - not as explicit
+
+*** Option 2: explicit overload on local definitions,
+
+Syntax is unfinalized yet, but what if we can declare explicitly when something is an overload?
+
+#+BEGIN_SRC coral
+# declaring overloads with an attribute
+@overload
+func foo(param):
+  bar
+
+@overload func foo (param):
+  bar
+
+@overload(foo)
+func foo_for_int(x:Int64):
+  bar
+#+END_SRC
+
+#+BEGIN_SRC coral
+  module A:
+    func foo(a): _
+    func foo(b): _   # (Warning/Error?): func overrides definition
+
+  module A:
+    @overload func foo(a): _
+    @overload func foo(b): _
+
+  module B:
+     import A (_, foo)
+     func foo(c): _ # func overrides definition
+     A.foo x
+     foo y
+  module C:
+     import A (_,, foo)
+     @overload func foo(d): _ # func overloads A
+     A.foo x # (without current overload)
+     foo y   # (with ccurrent overload)
+
+#+END_SRC
+
+** Can values be overloaded?
+
+This seems pretty odd, but you get it in languages like Haskell with type
+classes or C++ with an adhoc union type that implicitly converts to its case
+types. (see https://softwareengineering.stackexchange.com/questions/257065/).
+
+If so, whatever overload syntax we use for functions should probably also work
+for values.
+
+#+BEGIN_SRC coral
+  module D:
+     @overload let foo = 3
+     @overload let foo = "three"
+     # Overload(3, "three") + 4 = 7?
+     # Overload(3, "three") + "four" = "threefour"?
+#+END_SRC

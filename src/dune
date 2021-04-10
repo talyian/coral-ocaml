@@ -1,9 +1,11 @@
 (library
  (name coral_passes)
  (modules
-   name_resolution init_func builtin_defs)
+   name_resolution attribute_resolution init_func builtin_defs)
  (libraries coral_core coral_frontend)
- (preprocess (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))
+ (preprocess (pps ppx_compare ppx_deriving.show
+                  ppx_sexp_conv ppx_sexp_value
+                  ppx_let ppx_inline_test)))
 
 ;; (library
 ;;  (name coral)

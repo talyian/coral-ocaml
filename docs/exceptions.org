@@ -1,0 +1,48 @@
+* Exceptions
+
+Coral should have exceptions that you can throw upwards in the stack.
+
+* Stack context
+
+Often it's not just *exceptional* info that you want to pass between multiple
+levels of stack; should we have some kind of system for "jump up to handler"?
+
+Examples:
+
+   Timeout contexts:
+      - run X operation with 10 second timeout
+           - curl in 6 seconds
+           - curl in 6 seconds <-- this should time out after 4 seconds, so we need to "read" context.
+                                   on failure, we also need to bail and jump up to the failure handler
+                                   (do all intermediate frames also get to run destructors/defers?)
+
+* Do we need contexts or can we just use global variables?
+
+
+
+* Syntax
+
+    # "normal" syntax
+    try:
+      foo
+      foo
+    catch:
+      bar
+
+    # this seems more uniform with other blocks but may be annoying because you'd
+    # often just wind up using a lambda for foo
+    on_error (foo):
+      bar
+
+    on_error (func:
+      foo
+      foo
+    ):
+      bar
+
+    # what if it's just expression based?
+    # or_else would need to shortcircuit
+    (foo; foo).or_else bar
+    (foo; foo) ?? bar
+
+    # What if you have Option[T]{Exception} ? which `??` does it use?

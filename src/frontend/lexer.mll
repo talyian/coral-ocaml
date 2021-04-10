@@ -88,6 +88,7 @@ rule coral_token ctx = parse
   | '\n' [' ']* as tok { handle_newline (String.length tok - 1) ctx lexbuf }
   | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }
   | ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok { [Token.IDENTIFIER(tok)] }
+  | '@' (['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok) { [Token.ATTRIBUTE_NAME(tok)] }
   | "..." { [Token.ELLIPSIS] }
   | _ as tok { [Token.OTHER(tok)] }
   | eof { handle_newline 0 ctx lexbuf @ [Token.EOF] }

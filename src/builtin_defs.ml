@@ -2,34 +2,37 @@
 open Coral_core
 open Base
 
+(* called by name resolver to set up the initial set of names *)
 let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> 't) =
   let open Builtins in
   let builtin x = ref @@ Ast.Builtin {builtin= x; info= Ast.Info.create ()} in
   let overload name items =
     ref @@ Ast.Overload {name; items= List.map ~f:builtin items; info= Ast.Info.create ()} in
+  let def = f in
   init
-  |> f "Func" (builtin FUNC)
-  |> f "..." @@ builtin @@ ELLIPSIS
-  |> f "Str" @@ builtin @@ STR
-  |> f "Uint8" @@ builtin @@ UINT8
-  |> f "Uint32" @@ builtin @@ UINT32
-  |> f "Uint64" @@ builtin @@ UINT64
-  |> f "Int8" @@ builtin @@ INT8
-  |> f "Int32" @@ builtin @@ INT32
-  |> f "Int64" @@ builtin @@ INT64
-  |> f "IntSize" @@ builtin @@ INTNATIVE
-  |> f "UintSize" @@ builtin @@ INTNATIVE
-  |> f "Float64" @@ builtin @@ FLOAT64
-  |> f "Void" @@ builtin @@ VOID
-  |> f "Ptr" @@ builtin @@ PTR
-  |> f "+" (overload "+" [ADD_INT; ADD_FLOAT; ADD_STR])
-  |> f "-" (overload "-" [SUB_INT; SUB_FLOAT])
-  |> f "*" (overload "*" [MUL_INT; MUL_FLOAT])
-  |> f "/" (overload "/" [DIV_INT; DIV_FLOAT])
-  |> f "%" (overload "%" [MOD_INT; MOD_FLOAT])
-  |> f "=" (overload "=" [EQ_INT; EQ_FLOAT])
-  |> f "!=" (overload "!=" [NEQ_INT; NEQ_FLOAT])
-  |> f "<" (overload "<" [LT_INT; LT_FLOAT])
-  |> f ">" (overload ">" [GT_INT; GT_FLOAT])
-  |> f "<=" (overload "<=" [LTE_INT; LTE_FLOAT])
-  |> f ">=" (overload ">=" [GTE_INT; GTE_FLOAT])
+  |> def "Func" (builtin FUNC)
+  |> def "..." @@ builtin @@ ELLIPSIS
+  |> def "Str" @@ builtin @@ STR
+  |> def "Uint8" @@ builtin @@ UINT8
+  |> def "Uint32" @@ builtin @@ UINT32
+  |> def "Uint64" @@ builtin @@ UINT64
+  |> def "Int8" @@ builtin @@ INT8
+  |> def "Int32" @@ builtin @@ INT32
+  |> def "Int64" @@ builtin @@ INT64
+  |> def "IntSize" @@ builtin @@ INTNATIVE
+  |> def "UintSize" @@ builtin @@ INTNATIVE
+  |> def "Float64" @@ builtin @@ FLOAT64
+  |> def "Void" @@ builtin @@ VOID
+  |> def "Ptr" @@ builtin @@ PTR
+  |> def "+" (overload "+" [ADD_INT; ADD_FLOAT; ADD_STR])
+  |> def "-" (overload "-" [SUB_INT; SUB_FLOAT])
+  |> def "*" (overload "*" [MUL_INT; MUL_FLOAT])
+  |> def "/" (overload "/" [DIV_INT; DIV_FLOAT])
+  |> def "%" (overload "%" [MOD_INT; MOD_FLOAT])
+  |> def "=" (overload "=" [EQ_INT; EQ_FLOAT])
+  |> def "!=" (overload "!=" [NEQ_INT; NEQ_FLOAT])
+  |> def "<" (overload "<" [LT_INT; LT_FLOAT])
+  |> def ">" (overload ">" [GT_INT; GT_FLOAT])
+  |> def "<=" (overload "<=" [LTE_INT; LTE_FLOAT])
+  |> def ">=" (overload ">=" [GTE_INT; GTE_FLOAT])
+  |> def "overload" @@ builtin @@ Custom "overload"

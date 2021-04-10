@@ -63,6 +63,7 @@ module Node = struct
       | Overload of {name: string; items: t list; info: info}
       | Empty of {info: info}
       | Type of {typ: t; info: info}
+      | Decorated of {attribute: t; target: t; info: info}
       | TypeDecl of
           { name: string
           ; metatype: string (* TODO: higher-ordered/structured metatype? *)
@@ -121,7 +122,7 @@ module Node = struct
 
   type node = t [@@deriving compare, sexp_of, show {with_path= false}]
 
-  (** preorder fold *)
+  (** preorder fold - TODO: rename to fold? *)
   let fold_info ~init ~f e =
     match !e with
     | Module {lines; _} -> List.fold ~init ~f lines
@@ -131,11 +132,22 @@ module Node = struct
     | Func {body; _} -> f init body
     | Let {value; _} -> f init value
     | Set {value; _} -> f init value
+    | Decorated {attribute; target; _} -> f (f init attribute) target
     | Block {items; _} | Tuple {items; _} | List {items; _} -> List.fold ~init ~f items
     | Member _ | Return _ | Import _ | Extern _ | Param _ | Comment _ | IntLiteral _ | Type _
      |TypeAlias _ | TypeDecl _ | FloatLiteral _ | CharLiteral _ | StringLiteral _ | Var _
      |Builtin _ | Overload _ | Empty _ ->
         init
+
+  let fold_map ~init ~f e =
+    match !e with
+    | Module m ->
+        let init, new_lines = List.fold_map m.lines ~init ~f in
+        (init, ref @@ Module {m with lines= new_lines})
+    | Block b ->
+        let init, items = List.fold_map b.items ~init ~f in
+        (init, ref @@ Block {b with items})
+    | _ -> (init, e)
 
   let map_info ~(f : node -> Info.t -> Info.t) e =
     match !e with
@@ -167,6 +179,7 @@ module Node = struct
     | Type m -> Type {m with info= f e m.info}
     | TypeDecl m -> TypeDecl {m with info= f e m.info}
     | TypeAlias m -> TypeAlias {m with info= f e m.info}
+    | Decorated m -> Decorated {m with info= f e m.info}
 
   let get_info = function
     | Module {info; _} -> info
@@ -197,6 +210,7 @@ module Node = struct
     | Type {info; _} -> info
     | TypeDecl {info; _} -> info
     | TypeAlias {info; _} -> info
+    | Decorated {info; _} -> info
 end
 
 (* A set of constructors for the Ast nodes. *)
@@ -243,6 +257,9 @@ module Make = struct
   let typeDecl name metatype fields = ref @@ TypeDecl {name; metatype; fields; info= Info.create ()}
   let typeAlias name typ = ref @@ TypeAlias {name; typ; info= Info.create ()}
   let index callee args = ref @@ Index {callee; args; info= Info.create ()}
+
+  let attribute (attr : string) _params target =
+    ref @@ Decorated {attribute= var attr; target; info= Info.create ()}
 end
 
 include Node

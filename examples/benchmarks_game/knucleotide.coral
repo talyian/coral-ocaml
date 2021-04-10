@@ -1,14 +1,14 @@
 # K-Nucleotide
 
-# The really fast implementations customize the encoding into a 2-bit representation
-# and also customize the hash function. We don't do that here, since our goal is so track
-# perf of slicing and the default dict[str, ...] implementation.
 let dna = (stdin.bytes.lines()
     .skipUntil((x) => x.startswith ">THREE")
     .skip(1)
     .takeUntil((x) => x.startswith ">").map(uppercase).join())
 
 func build_table(n):
+  # The really fast implementations customize the encoding into a 2-bit representation
+  # and also customize the hash function. We don't do that here, since our goal is so track
+  # perf of slicing and the default dict[str, ...] implementation.
   let table = DefaultDict()
   for (start) in range(0, dna.length() - n + 1):
     set table[dna.slice(start, start + n)] += 1

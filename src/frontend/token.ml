@@ -26,6 +26,7 @@ type token =
   | FOR
   | IN
   | IDENTIFIER of string
+  | ATTRIBUTE_NAME of string (* @identifier *)
   | FUNC
   | FLOAT of string
   | EQ

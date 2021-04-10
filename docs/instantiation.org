@@ -1,0 +1,5 @@
+* Generic Function Instantiation
+
+During type-checking, we proceed top-down. This means that at every call-site,
+we already have types for the parameters.
+0
