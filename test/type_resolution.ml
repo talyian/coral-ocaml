@@ -3,17 +3,49 @@ open Coral_core
 open Coral_frontend
 
 let%expect_test "types - hello world" =
-  ignore(let%bind.Result imports = Utils.parse_with_imports {|
-extern("c", "printf",, Func[...][])
+  match let%bind.Result imports = Utils.parse_with_imports {|
+extern("c", "printf", Func[...][])
 
-printf("Hello, %.*s\n", 6, "World!")
+func main ():
+  printf("Hello, %.*s\n", 6, "World!")
 |} in
          let names = Coral_passes.Name_resolution.construct imports in
          let names = Coral_passes.Name_resolution.get_data names in
          let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
+         let types = Coral_types.Resolver.construct names main in
+     Ok types with
+  | Ok types -> ()
+  | Error e ->
+    Stdio.print_endline @@ Frontend.show_parseError e;
+  [%expect.unreachable]
+[@@expect.uncaught_exn {|
+  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+     This is strongly discouraged as backtraces are fragile.
+     Please change this test to not include a backtrace. *)
 
-  Ok ())
+  (Failure
+    "(\"instantiating call of unknown type\"(Call(callee(Var Func))(args((Var ...)))))")
+  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
+  Called from Coral_types__Resolver.instantiate in file "src/type_resolution/resolver.ml", line 241, characters 28-72
+  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 179, characters 26-69
+  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
+  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 201, characters 24-40
+  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
+  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
+  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 176, characters 27-46
+  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
+  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 159, characters 25-42
+  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
+  Called from Coral_types__Resolver.construct in file "src/type_resolution/resolver.ml", line 109, characters 9-112
+  Called from Tests__Type_resolution.(fun) in file "test/type_resolution.ml", line 15, characters 21-62
+  Called from Tests__Type_resolution.(fun) in file "test/type_resolution.ml", line 6, characters 8-461
+  Called from Expect_test_collector.Make.Instance.exec in file "collector/expect_test_collector.ml", line 244, characters 12-19
 
+  Trailing output
+  ---------------
+  ((Var Func) ((Const (Builtin ELLIPSIS))))
+  ("resolving call" (Var Func) ((Var ...)))
+  ((Call (callee (Var Func)) (args ((Var ...)))) ()) |}]
 (* open Base
  * open Coral_core
  * open Coral_frontend

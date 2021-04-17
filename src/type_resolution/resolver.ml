@@ -237,6 +237,7 @@ and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
   match Map.find t.instantiations (callee, args_types) with
   | Some existing -> (t, existing.result_type)
   | None ->
+      Stdio.print_s [%sexp (callee : Ast.t), (args_types : TypeSpec.t list)] ;
       let t, new_instance = instantiate1 t callee callee_type args_types in
       let t =
         { t with

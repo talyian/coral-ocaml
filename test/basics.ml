@@ -7,17 +7,14 @@ import raw_clib
 raw_clib.printf("Hello, %s\n", "World")|} in
     Utils.dump_expr imports.main in
   [%expect {|
-    ref (Module {name = "";
-           lines =
-           [ref (Import {path = ["raw_clib"]; names = [(Ast.Module None)]});
-             ref (Call {
-                    callee =
-                    ref (Member {base = ref (Var {name = "raw_clib"});
-                           member = "printf"});
-                    args =
-                    [ref (StringLiteral {literal = "Hello, %s\n"});
-                      ref (StringLiteral {literal = "World"})]})
-             ]}) |}]
+    Module {name = "";
+      lines =
+      [Import {path = ["raw_clib"]; names = [(Ast.Module None)]};
+        Call {callee = Member {base = (Var raw_clib); member = "printf"};
+          args =
+          [StringLiteral {literal = "Hello, %s\n"};
+            StringLiteral {literal = "World"}]}
+        ]} |}]
 
 
 let%expect_test "import-clib" =
@@ -28,17 +25,14 @@ cstd.printf("Hello, %s\n", "World")|} with
   | Ok imports -> Utils.dump_expr imports.main
   | Error e -> Stdio.print_endline @@ Coral_frontend.Frontend.show_parseError e);
   [%expect {|
-    ref (Module {name = "";
-           lines =
-           [ref (Import {path = ["cstd"]; names = [(Ast.Module None)]});
-             ref (Call {
-                    callee =
-                    ref (Member {base = ref (Var {name = "cstd"});
-                           member = "printf"});
-                    args =
-                    [ref (StringLiteral {literal = "Hello, %s\n"});
-                      ref (StringLiteral {literal = "World"})]})
-             ]}) |}]
+    Module {name = "";
+      lines =
+      [Import {path = ["cstd"]; names = [(Ast.Module None)]};
+        Call {callee = Member {base = (Var cstd); member = "printf"};
+          args =
+          [StringLiteral {literal = "Hello, %s\n"};
+            StringLiteral {literal = "World"}]}
+        ]} |}]
 
 
 let%expect_test "test-raw_posix" =

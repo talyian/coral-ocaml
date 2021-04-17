@@ -9,8 +9,8 @@ module TypeSpec = struct type t = Term of Term.t | Applied of t * t list | Insta
 module Graph = struct end
 
 module Resolver : sig
-  type t
-
-  val add_named_term : t -> string -> t * Term.t
-  val solve : t -> Constraint.t -> TypeSpec.t
+  (* type t
+   *
+   * val add_named_term : t -> string -> t * Term.t
+   * val solve : t -> Constraint.t -> TypeSpec.t *)
 end = struct end

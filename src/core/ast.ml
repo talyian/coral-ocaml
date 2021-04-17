@@ -14,6 +14,20 @@ type importType = Module of string option | All | ImpMember of string * string o
 [@@deriving compare, sexp, show]
 
 module Node = struct
+  (* make sexp skinnier by just showing the name *)
+  type var = {name: string} [@@deriving compare]
+
+  let pp_var formatter {name} = Caml.Format.fprintf formatter "%s" name
+  let var_of_sexp = function Sexp.Atom name -> {name} | List _ -> failwith "unexpected list"
+  let sexp_of_var {name} = Sexp.Atom name
+
+  (* make sexp skinnier by hiding the refs *)
+  type 'a sexp_ref = 'a ref [@@deriving compare]
+
+  let pp_sexp_ref pp_of_a formatter {contents} = pp_of_a formatter contents
+  let sexp_ref_of_sexp f s = ref @@ f s
+  let sexp_of_sexp_ref f {contents} = f contents
+
   module Node0 = struct
     type t0 =
       | Module of {name: string; lines: t list}
@@ -29,7 +43,7 @@ module Node = struct
       | FloatLiteral of {literal: string; value: float}
       | CharLiteral of {literal: string}
       | StringLiteral of {literal: string}
-      | Var of {name: string}
+      | Var of var
       | Let of {name: string; typ: t option; value: t}
       | Set of {name: t; value: t}
       | Block of {items: t list}
@@ -50,7 +64,7 @@ module Node = struct
       | TypeAlias of {name: string; typ: t}
     [@@deriving compare, sexp, show {with_path= false}]
 
-    and t = t0 ref
+    and t = t0 sexp_ref
 
     let rec show_short node =
       let open Printf in
