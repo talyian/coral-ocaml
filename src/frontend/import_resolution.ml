@@ -9,20 +9,9 @@ open Base
 
     ** which imports *)
 
-type node = Ast.node
-
-module NodeM = struct
-  module NodeM = struct type t = Ast.node [@@deriving compare, sexp_of] end
-  include NodeM
-  include Comparable.Make (NodeM)
-end
-
 module Imports = struct
-  type resolved = {full_path: string; expr: node}
-
-  let new_resolved full_path expr = {full_path; expr}
-
-  type t = {main: node; imports: node Map.M(NodeM).t}
+  type resolved = {full_path: string; expr: Ast.node}
+  type t = {main: Ast.node; imports: Ast.node Map.M(Ast).t}
 
   let add t key data = {t with imports= Map.set ~key ~data t.imports}
   let get key {main; imports} = Map.find_exn imports key
@@ -33,7 +22,7 @@ let try_read_file path = try Some (Stdio.In_channel.read_all path) with _ -> Non
 (* We're parameterized over the parser function type so that this module can be compiled
    independently from the frontend *)
 (* TODO Now that this is in frontend, this seems unnecessary *)
-type parse_function_t = string -> (node, Frontend.parseError) Base.Result.t
+type parse_function_t = string -> (Ast.node, Frontend.parseError) Base.Result.t
 
 let resolve ~(parse_func : parse_function_t) ~(src : string) =
   (* load_import : string -> resolved Or_error.t *)
@@ -59,12 +48,12 @@ let resolve ~(parse_func : parse_function_t) ~(src : string) =
   (* To run import resolution, we start from the main file and run load_import recursively against
      all its imports *)
   let%bind.Result expr = parse_func src in
-  let init = {Imports.main= expr; Imports.imports= Map.empty (module NodeM)} in
-  let f (imports : Imports.t) _node : Imports.t =
-    match !_node with
+  let init = {Imports.main= expr; Imports.imports= Map.empty (module Ast)} in
+  let f (imports : Imports.t) import_node : Imports.t =
+    match !import_node with
     | Ast.Import {path; names; _} -> (
       match load_import ~path with
       | Error e -> failwith @@ Error.to_string_hum e
-      | Ok resolved -> Imports.add imports _node resolved.expr )
+      | Ok resolved -> Imports.add imports import_node resolved.expr )
     | _ -> imports in
-  Ok (Ast.fold_info ~init ~f expr)
+  Ok (Ast.fold ~init ~f expr)

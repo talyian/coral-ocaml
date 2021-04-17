@@ -5,9 +5,8 @@ open Base
 (* called by name resolver to set up the initial set of names *)
 let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> 't) =
   let open Builtins in
-  let builtin x = ref @@ Ast.Builtin {builtin= x; info= Ast.Info.create ()} in
-  let overload name items =
-    ref @@ Ast.Overload {name; items= List.map ~f:builtin items; info= Ast.Info.create ()} in
+  let builtin x = ref @@ Ast.Builtin {builtin= x} in
+  let overload name items = ref @@ Ast.Overload {name; items= List.map ~f:builtin items} in
   let def = f in
   init
   |> def "Func" (builtin FUNC)

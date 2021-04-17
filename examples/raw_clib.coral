@@ -4,6 +4,10 @@
 # TODO: currently this is purely a type alias
 #   We need some way to make a newtype (type Cstr = Ptr[Uint8]?)
 #   and to map a module's functions over a newtype.
+#   Q: What does "map a module's functions over a newtype" mean?
+#   A: e.g. type Id = String; id.substring(1, 3) :: Id
+#   Q: What if the original module doesn't want to be completely subsumed?
+#      e.g. type Id = String; id.toString() :: Id seems weird.
 let Cstr = Ptr[Uint8]
 
 extern("c", "malloc", Func[Cstr][Uint64])

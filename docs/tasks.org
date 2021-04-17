@@ -1,0 +1,16 @@
+* Figure out a good task-tracking workflow in org
+  https://orgmode.org/worg/org-tutorials/orgtutorial_dto.html
+
+* Attributes
+  we should be able to specify attributes.
+
+* TODO ("unknown type" (Const(Builtin FUNC))) :bug:
+  this is an error in 'types - hello world' and is some fundamental issue with typing.
+  Basically,
+
+  1. ~Func~ is a type so ~typeof(Func)~ should be  ..? -> ? -> Resolvedfunction~
+     Func[...TParams][TReturn] -> ~ResolvedFunction~ 
+
+  2. List is a type constructor, Int is a type. List[Int] is a type
+  3. 
+  

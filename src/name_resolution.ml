@@ -55,7 +55,7 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let reference = Scope.find ~name data.current_scope in
       let reference = Option.value_exn ~message:("Name not found: " ^ name) reference in
       {data with refs= Map.set data.refs ~key:node ~data:reference}
-  | Import {path; names; info} ->
+  | Import {path; names} ->
       let path_name = List.last_exn path in
       let imported_module = Coral_frontend.Import_resolution.Imports.get node imports in
       let imported_names =
@@ -87,11 +87,11 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
                 Scope.add member imported_member scope)
           names in
       {data with current_scope= scope}
-  | Extern {binding= _; name; typ; info} ->
+  | Extern {binding= _; name; typ} ->
       let data = run data typ in
       let scope = Scope.add name node data.current_scope in
       {data with current_scope= scope}
-  | Func {name; params; body; ret_type; info} ->
+  | Func {name; params; body; ret_type} ->
       let outer_scope = Scope.add name node data.current_scope in
       let inner_scope = Scope.nest outer_scope in
       let inner_scope = Scope.add "__function__" node inner_scope in
@@ -100,28 +100,28 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let data = List.fold params ~init:data ~f:run in
       let data = run data body in
       {data with current_scope= outer_scope}
-  | Param {name; typ; idx= _; info} ->
+  | Param {name; typ; idx= _} ->
       let data = Option.fold ~f:run ~init:data typ in
       {data with current_scope= Scope.add name node data.current_scope}
-  | Return {value; info} ->
+  | Return {value} ->
       let data = run data value in
       let func = Scope.find ~name:"__function__" data.current_scope in
       let func = Option.value_exn ~message:"function not found for return" func in
       {data with returns= Map.set data.returns ~key:node ~data:func}
-  | Let {name; typ; value; info} ->
+  | Let {name; typ; value} ->
       let outer_scope = data.current_scope in
       let data = Option.fold ~f:run ~init:data typ in
       let data = run {data with current_scope= Scope.nest data.current_scope} value in
       let data = {data with current_scope= outer_scope} in
       let scope = Scope.add name node data.current_scope in
       {data with current_scope= scope}
-  | Member {base; member; info} ->
+  | Member {base; member} ->
       let data = run data base in
       data
-  | Ast.Module {name; lines; info} ->
+  | Ast.Module {name; lines} ->
       (* current_scope starts off in a global or outer scope, so make a new scope for this module *)
       let data = {data with current_scope= Scope.nest data.current_scope} in
-      let data = Ast.fold_info ~init:data ~f:run node in
+      let data = Ast.fold ~init:data ~f:run node in
       let data =
         match data.current_scope with
         | Scope {parents; names} ->
@@ -130,14 +130,14 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
                   Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
                 {dd with members}) in
       data
-  | Ast.Type {typ; info} ->
+  | Ast.Type {typ} ->
       Ast.show typ |> Stdio.print_endline ;
       Caml.exit 0
   | Ast.TypeDecl {name; metatype; fields; _} ->
       {data with current_scope= Scope.add name node data.current_scope}
   | Ast.TypeAlias {name; typ; _} ->
       {data with current_scope= Scope.add name node data.current_scope}
-  | _ -> Ast.fold_info ~init:data ~f:run node
+  | _ -> Ast.fold ~init:data ~f:run node
 
 let show n =
   Stdio.printf "Names\n" ;

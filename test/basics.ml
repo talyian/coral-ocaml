@@ -9,18 +9,15 @@ raw_clib.printf("Hello, %s\n", "World")|} in
   [%expect {|
     ref (Module {name = "";
            lines =
-           [ref (Import {path = ["raw_clib"]; names = [(Ast.Module None)];
-                   info = ()});
+           [ref (Import {path = ["raw_clib"]; names = [(Ast.Module None)]});
              ref (Call {
                     callee =
-                    ref (Member {base = ref (Var {name = "raw_clib"; info = ()});
-                           member = "printf"; info = ()});
+                    ref (Member {base = ref (Var {name = "raw_clib"});
+                           member = "printf"});
                     args =
-                    [ref (StringLiteral {literal = "Hello, %s\n"; info = ()});
-                      ref (StringLiteral {literal = "World"; info = ()})];
-                    info = ()})
-             ];
-           info = ()}) |}]
+                    [ref (StringLiteral {literal = "Hello, %s\n"});
+                      ref (StringLiteral {literal = "World"})]})
+             ]}) |}]
 
 
 let%expect_test "import-clib" =
@@ -33,17 +30,15 @@ cstd.printf("Hello, %s\n", "World")|} with
   [%expect {|
     ref (Module {name = "";
            lines =
-           [ref (Import {path = ["cstd"]; names = [(Ast.Module None)]; info = ()});
+           [ref (Import {path = ["cstd"]; names = [(Ast.Module None)]});
              ref (Call {
                     callee =
-                    ref (Member {base = ref (Var {name = "cstd"; info = ()});
-                           member = "printf"; info = ()});
+                    ref (Member {base = ref (Var {name = "cstd"});
+                           member = "printf"});
                     args =
-                    [ref (StringLiteral {literal = "Hello, %s\n"; info = ()});
-                      ref (StringLiteral {literal = "World"; info = ()})];
-                    info = ()})
-             ];
-           info = ()}) |}]
+                    [ref (StringLiteral {literal = "Hello, %s\n"});
+                      ref (StringLiteral {literal = "World"})]})
+             ]}) |}]
 
 
 let%expect_test "test-raw_posix" =

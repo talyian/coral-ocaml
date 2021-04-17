@@ -1,0 +1,17 @@
+
+
+
+* Attributes
+
+We should be able to decorate nodes with notes that can be used in metaprogramming.
+
+* Lexical rules
+
+The problem with Python-style attributes is that
+
+* Use casese
+
+#+BEGIN_SRC coral
+func foobar(x:Int):
+
+#+END_SRC

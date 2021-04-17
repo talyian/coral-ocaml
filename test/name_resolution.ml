@@ -24,17 +24,15 @@ func main():
         [Var-...] -> Builtin-ELLIPSIS
         [Var-Cstr] -> Let-Cstr
         [Var-Func] -> Builtin-FUNC
-        [Var-Ptr] -> Builtin-PTR
         [Var-Uint64] -> Builtin-UINT64
-        [Var-Uint8] -> Builtin-UINT8
         [Var-foo] -> Func-foo
         [Var-printf] -> Extern-printf
         [Var-target] -> Let-target
         [Var-world] -> Param-world
     Names.members
-        [Module.().foo] -> Func-foo
-        [Module.().main] -> Func-main
-        [Module.().printf] -> Extern-printf
+        [<module>.foo] -> Func-foo
+        [<module>.main] -> Func-main
+        [<module>.printf] -> Extern-printf
         [raw_clib.Cstr] -> Let-Cstr
         [raw_clib.free] -> Extern-free
         [raw_clib.malloc] -> Extern-malloc

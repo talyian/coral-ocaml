@@ -54,7 +54,6 @@ module TypeSpec = struct
   let get_type = function
     | TypeFor t -> Const (Value.Builtin (Builtins.Custom "Type"))
     | Const (Value.Int _) -> Const (Value.Builtin Builtins.INT64)
-    (* | Const (Builtin Builtins.FUNC) -> *)
     | t -> failwith @@ Sexp.to_string [%sexp "unknown type", (t : t)]
 end
 
@@ -155,7 +154,7 @@ and match_call t =
 
 and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
   match !node with
-  | Ast.Func {name; ret_type; params; body; info} ->
+  | Ast.Func {name; ret_type; params; body} ->
       let t, param_types = check_types t params in
       let t, body_type = check_type t body in
       let func_type =
@@ -179,12 +178,15 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
       (* Is callee_type generic? Then we need to create an instance of callee *)
       let instance_type = instantiate t callee callee_type args_types in
       Stdio.print_s [%sexp "resolving call", (callee : Ast.Node.t), (args : Ast.Node.t list)] ;
-      ( match TypeSpec.get_type callee_type with
-      | callee_kind ->
-          if false then
-            failwith
-            @@ Sexp.to_string [%sexp (callee_type : TypeSpec.t), (callee_kind : TypeSpec.t)]
-          else () ) ;
+      ( match callee_type with
+      | TypeSpec.Const (Value.Builtin Builtins.FUNC) -> ()
+      | _ -> (
+        match TypeSpec.get_type callee_type with
+        | callee_kind ->
+            if false then
+              failwith
+              @@ Sexp.to_string [%sexp (callee_type : TypeSpec.t), (callee_kind : TypeSpec.t)]
+            else () ) ) ;
       let sol = match_call t (TypeSpec.Applied (callee_type, args_types)) in
       Option.value_exn ~message:("type check call failed: " ^ TypeSpec.show callee_type) sol
   | Ast.Index {callee; args; _} ->
@@ -198,15 +200,15 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
   | Ast.Extern {name; typ; _} ->
       let t, typ_type = check_type t typ in
       (t, TypeSpec.InstanceOf typ_type)
-  | Ast.Member {base; member; info} ->
+  | Ast.Member {base; member} ->
       let member_expr =
         let base = Names.deref_var t.ns base |> Option.value ~default:base in
         Option.value_exn
           ~message:("Member reference not found: " ^ Ast.show node)
           (Names.deref_member t.ns base member) in
       check_type t member_expr
-  | Ast.TypeAlias {name; typ; info} -> check_type t typ
-  | Ast.TypeDecl {name; metatype; fields; info} -> (t, Const (Value.String name))
+  | Ast.TypeAlias {name; typ} -> check_type t typ
+  | Ast.TypeDecl {name; metatype; fields} -> (t, Const (Value.String name))
   | Ast.Var {name; _} ->
       let reference =
         Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in

@@ -1,7 +1,5 @@
 (* Ast Node - these represent an "expression"
  * They are created in the parser and can be tagged with additional information in each pass.
- * a pass can naively store data in a Map<node, value>
- * but could alternatively foldmap over an Ast producing a new one
  *)
 
 open Base
@@ -15,66 +13,44 @@ open Base
 type importType = Module of string option | All | ImpMember of string * string option
 [@@deriving compare, sexp, show]
 
-(* module Info = struct
- *   type t = {id: int} [@@deriving compare, sexp, show {with_path= false}]
- *
- *   let _id = ref 0
- *
- *   let create () =
- *     _id := !_id + 1 ;
- *     {id= !_id}
- * end *)
-
-module Info = struct
-  type t = unit [@@deriving compare, sexp, show {with_path= false}]
-
-  let _id = ref 0
-  let create () = ()
-end
-
 module Node = struct
-  type info = Info.t [@@deriving compare, sexp, show {with_path= false}]
-
   module Node0 = struct
-    type 'info t0 =
-      | Module of {name: string; lines: t list; info: info}
-      | Call of {callee: t; args: t list; info: info}
-      | Import of {path: string list; names: importType list; info: info}
-      | Extern of {binding: string; name: string; typ: t; info: info}
-      | Func of {name: string; ret_type: t option; params: t list; body: t; info: info}
-      | Param of {idx: int; name: string; typ: t option; info: info}
-      | Comment of {comment: string; info: info}
-      | Binop of {callee: t; args: t list; info: info}
-      | If of {cond: t; ifbody: t; elsebody: t; info: info}
-      | IntLiteral of {literal: string; value: int64; info: info}
-      | FloatLiteral of {literal: string; value: float; info: info}
-      | CharLiteral of {literal: string; info: info}
-      | StringLiteral of {literal: string; info: info}
-      | Var of {name: string; info: info}
-      | Let of {name: string; typ: t option; value: t; info: info}
-      | Set of {name: t; value: t; info: info}
-      | Block of {items: t list; info: info}
-      | Tuple of {items: t list; info: info}
-      | List of {items: t list; info: info}
-      | Index of {callee: t; args: t list; info: info}
-      | Member of {base: t; member: string; info: info}
-      | Return of {value: t; info: info}
-      | Builtin of {builtin: Builtins.t; info: info}
-      | Overload of {name: string; items: t list; info: info}
-      | Empty of {info: info}
-      | Type of {typ: t; info: info}
-      | Decorated of {attribute: t; target: t; info: info}
+    type t0 =
+      | Module of {name: string; lines: t list}
+      | Call of {callee: t; args: t list}
+      | Import of {path: string list; names: importType list}
+      | Extern of {binding: string; name: string; typ: t}
+      | Func of {name: string; ret_type: t option; params: t list; body: t}
+      | Param of {idx: int; name: string; typ: t option}
+      | Comment of {comment: string}
+      | Binop of {callee: t; args: t list}
+      | If of {cond: t; ifbody: t; elsebody: t}
+      | IntLiteral of {literal: string; value: int64}
+      | FloatLiteral of {literal: string; value: float}
+      | CharLiteral of {literal: string}
+      | StringLiteral of {literal: string}
+      | Var of {name: string}
+      | Let of {name: string; typ: t option; value: t}
+      | Set of {name: t; value: t}
+      | Block of {items: t list}
+      | Tuple of {items: t list}
+      | List of {items: t list}
+      | Index of {callee: t; args: t list}
+      | Member of {base: t; member: string}
+      | Return of {value: t}
+      | Builtin of {builtin: Builtins.t}
+      | Overload of {name: string; items: t list}
+      | Empty
+      | Type of {typ: t}
+      | Decorated of {attribute: t; target: t}
       | TypeDecl of
           { name: string
           ; metatype: string (* TODO: higher-ordered/structured metatype? *)
-          ; fields: t list
-          ; info: info }
-      | TypeAlias of {name: string; typ: t; info: info}
+          ; fields: t list }
+      | TypeAlias of {name: string; typ: t}
     [@@deriving compare, sexp, show {with_path= false}]
 
-    and t1 = info t0
-
-    and t = t1 ref
+    and t = t0 ref
 
     let rec show_short node =
       let open Printf in
@@ -106,7 +82,7 @@ module Node = struct
         | Param _ -> "Param"
         | _ -> "expr" in
       match !node with
-      | Module {name; info; _} -> ( match name with "" -> "Module." ^ Info.show info | n -> n )
+      | Module {name; _} -> ( match name with "" -> "<module>" | n -> n )
       | Block _ -> "Block"
       | Tuple {items; _} -> "(" ^ (String.concat ~sep:", " @@ List.map ~f:show_short items) ^ ")"
       | StringLiteral {literal; _} ->
@@ -122,114 +98,48 @@ module Node = struct
 
   type node = t [@@deriving compare, sexp_of, show {with_path= false}]
 
-  (** preorder fold - TODO: rename to fold? *)
-  let fold_info ~init ~f e =
-    match !e with
-    | Module {lines; _} -> List.fold ~init ~f lines
-    | Index {callee; args; _} | Call {callee; args; _} | Binop {callee; args; _} ->
-        f init callee |> fun init -> List.fold ~init ~f args
-    | If {cond; ifbody; elsebody; _} -> f (f (f init cond) ifbody) elsebody
-    | Func {body; _} -> f init body
-    | Let {value; _} -> f init value
-    | Set {value; _} -> f init value
-    | Decorated {attribute; target; _} -> f (f init attribute) target
-    | Block {items; _} | Tuple {items; _} | List {items; _} -> List.fold ~init ~f items
-    | Member _ | Return _ | Import _ | Extern _ | Param _ | Comment _ | IntLiteral _ | Type _
-     |TypeAlias _ | TypeDecl _ | FloatLiteral _ | CharLiteral _ | StringLiteral _ | Var _
-     |Builtin _ | Overload _ | Empty _ ->
-        init
-
-  let fold_map ~init ~f e =
-    match !e with
+  let fold_map ~(init : 'state) ~(f : 'state -> t -> 'state * t) (expr : t) =
+    match !expr with
     | Module m ->
-        let init, new_lines = List.fold_map m.lines ~init ~f in
-        (init, ref @@ Module {m with lines= new_lines})
-    | Block b ->
-        let init, items = List.fold_map b.items ~init ~f in
-        (init, ref @@ Block {b with items})
-    | _ -> (init, e)
+        let init, lines = List.fold_map ~init ~f m.lines in
+        (init, ref @@ Module {m with lines})
+    | Call c ->
+        let init, callee = f init c.callee in
+        let init, args = List.fold_map ~init ~f c.args in
+        (init, ref @@ Call {callee; args})
+    | Block {items} ->
+        let init, items = List.fold_map ~init ~f items in
+        (init, ref @@ Block {items})
+    | Tuple {items} ->
+        let init, items = List.fold_map ~init ~f items in
+        (init, ref @@ Tuple {items})
+    | List {items} ->
+        let init, items = List.fold_map ~init ~f items in
+        (init, ref @@ List {items})
+    | Import _ | Extern _ | Func _ | Param _ | Comment _ | Binop _ | If _ | IntLiteral _
+     |FloatLiteral _ | CharLiteral _ | StringLiteral _ | Var _ | Let _ | Set _ | Index _
+     |Member _ | Return _ | Builtin _ | Overload _ | Empty | Type _ | Decorated _ | TypeDecl _
+     |TypeAlias _ ->
+        (init, expr)
 
-  let map_info ~(f : node -> Info.t -> Info.t) e =
-    match !e with
-    | Module m -> Module {m with info= f e m.info}
-    | Call m -> Call {m with info= f e m.info}
-    | Index m -> Index {m with info= f e m.info}
-    | Import m -> Import {m with info= f e m.info}
-    | Extern m -> Extern {m with info= f e m.info}
-    | Func m -> Func {m with info= f e m.info}
-    | Param m -> Param {m with info= f e m.info}
-    | Comment m -> Comment {m with info= f e m.info}
-    | Binop m -> Binop {m with info= f e m.info}
-    | If m -> If {m with info= f e m.info}
-    | IntLiteral m -> IntLiteral {m with info= f e m.info}
-    | FloatLiteral m -> FloatLiteral {m with info= f e m.info}
-    | CharLiteral m -> CharLiteral {m with info= f e m.info}
-    | StringLiteral m -> StringLiteral {m with info= f e m.info}
-    | Var m -> Var {m with info= f e m.info}
-    | Let m -> Let {m with info= f e m.info}
-    | Set m -> Set {m with info= f e m.info}
-    | Block m -> Block {m with info= f e m.info}
-    | Tuple m -> Tuple {m with info= f e m.info}
-    | List m -> List {m with info= f e m.info}
-    | Member m -> Member {m with info= f e m.info}
-    | Return m -> Return {m with info= f e m.info}
-    | Builtin m -> Builtin {m with info= f e m.info}
-    | Overload m -> Overload {m with info= f e m.info}
-    | Empty m -> Empty {info= f e m.info}
-    | Type m -> Type {m with info= f e m.info}
-    | TypeDecl m -> TypeDecl {m with info= f e m.info}
-    | TypeAlias m -> TypeAlias {m with info= f e m.info}
-    | Decorated m -> Decorated {m with info= f e m.info}
-
-  let get_info = function
-    | Module {info; _} -> info
-    | Call {info; _} -> info
-    | Index {info; _} -> info
-    | Import {info; _} -> info
-    | Extern {info; _} -> info
-    | Func {info; _} -> info
-    | Param {info; _} -> info
-    | Comment {info; _} -> info
-    | Binop {info; _} -> info
-    | If {info; _} -> info
-    | IntLiteral {info; _} -> info
-    | FloatLiteral {info; _} -> info
-    | CharLiteral {info; _} -> info
-    | StringLiteral {info; _} -> info
-    | Var {info; _} -> info
-    | Let {info; _} -> info
-    | Set {info; _} -> info
-    | Block {info; _} -> info
-    | Tuple {info; _} -> info
-    | List {info; _} -> info
-    | Member {info; _} -> info
-    | Return {info; _} -> info
-    | Builtin {info; _} -> info
-    | Overload {info; _} -> info
-    | Empty {info; _} -> info
-    | Type {info; _} -> info
-    | TypeDecl {info; _} -> info
-    | TypeAlias {info; _} -> info
-    | Decorated {info; _} -> info
+  let fold ~init ~f expr = fst @@ fold_map ~init ~f:(fun state t -> (f state t, t)) expr
 end
 
 (* A set of constructors for the Ast nodes. *)
 module Make = struct
   open Node
 
-  let moduleNode name lines : node = ref @@ Module {name; lines; info= Info.create ()}
-  let extern binding name typ : node = ref @@ Extern {binding; name; typ; info= Info.create ()}
-  let import path names : node = ref @@ Import {path; names; info= Info.create ()}
-  let var name : node = ref @@ Var {name; info= Info.create ()}
-  let returnNode value : node = ref @@ Return {value; info= Info.create ()}
-  let tuple items : node = ref @@ Tuple {items; info= Info.create ()}
-  let list items : node = ref @@ List {items; info= Info.create ()}
-  let block items : node = ref @@ Block {items; info= Info.create ()}
-  let letNode name typ value : node = ref @@ Let {name; typ; value; info= Info.create ()}
-  let setNode name value : node = ref @@ Set {name; value; info= Info.create ()}
-
-  let ifNodeBase cond ifbody elsebody : node =
-    ref @@ If {cond; ifbody; elsebody; info= Info.create ()}
+  let moduleNode name lines : node = ref @@ Module {name; lines}
+  let extern binding name typ : node = ref @@ Extern {binding; name; typ}
+  let import path names : node = ref @@ Import {path; names}
+  let var name : node = ref @@ Var {name}
+  let returnNode value : node = ref @@ Return {value}
+  let tuple items : node = ref @@ Tuple {items}
+  let list items : node = ref @@ List {items}
+  let block items : node = ref @@ Block {items}
+  let letNode name typ value : node = ref @@ Let {name; typ; value}
+  let setNode name value : node = ref @@ Set {name; value}
+  let ifNodeBase cond ifbody elsebody : node = ref @@ If {cond; ifbody; elsebody}
 
   let rec ifNode cond ifbody eliflist elsebody =
     match eliflist with
@@ -237,29 +147,20 @@ module Make = struct
         ifNodeBase cond ifbody (ifNode elif_cond elif_body rest elsebody)
     | [] -> ifNodeBase cond ifbody elsebody
 
-  let funcNode name ret_type params body =
-    ref @@ Func {name; ret_type; params; body; info= Info.create ()}
-
-  let callNode callee args : node = ref @@ Call {callee; args; info= Info.create ()}
-  let binop (a, b, c) : node = ref @@ Call {callee= var a; args= [b; c]; info= Info.create ()}
-
-  let int_literal s : node =
-    ref @@ IntLiteral {literal= s; value= Int64.of_string s; info= Info.create ()}
-
-  let float_literal s =
-    ref @@ FloatLiteral {literal= s; value= Float.of_string s; info= Info.create ()}
-
-  let char_literal s : node = ref @@ CharLiteral {literal= String.of_char s; info= Info.create ()}
-  let string_literal s : node = ref @@ StringLiteral {literal= s; info= Info.create ()}
-  let empty : node = ref @@ Empty {info= Info.create ()}
-  let member base member : node = ref @@ Member {base; member; info= Info.create ()}
-  let param idx name typ : node = ref @@ Param {idx; name; typ; info= Info.create ()}
-  let typeDecl name metatype fields = ref @@ TypeDecl {name; metatype; fields; info= Info.create ()}
-  let typeAlias name typ = ref @@ TypeAlias {name; typ; info= Info.create ()}
-  let index callee args = ref @@ Index {callee; args; info= Info.create ()}
-
-  let attribute (attr : string) _params target =
-    ref @@ Decorated {attribute= var attr; target; info= Info.create ()}
+  let funcNode name ret_type params body = ref @@ Func {name; ret_type; params; body}
+  let callNode callee args : node = ref @@ Call {callee; args}
+  let binop (a, b, c) : node = ref @@ Call {callee= var a; args= [b; c]}
+  let int_literal s : node = ref @@ IntLiteral {literal= s; value= Int64.of_string s}
+  let float_literal s = ref @@ FloatLiteral {literal= s; value= Float.of_string s}
+  let char_literal s : node = ref @@ CharLiteral {literal= String.of_char s}
+  let string_literal s : node = ref @@ StringLiteral {literal= s}
+  let empty : node = ref @@ Empty
+  let member base member : node = ref @@ Member {base; member}
+  let param idx name typ : node = ref @@ Param {idx; name; typ}
+  let typeDecl name metatype fields = ref @@ TypeDecl {name; metatype; fields}
+  let typeAlias name typ = ref @@ TypeAlias {name; typ}
+  let index callee args = ref @@ Index {callee; args}
+  let attribute (attr : string) _params target = ref @@ Decorated {attribute= var attr; target}
 end
 
 include Node
