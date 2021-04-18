@@ -9,32 +9,16 @@ open Base
 
 [@@@warning "-26-27"]
 
-module Value = struct
-  (* Value.t is a compile-time value *)
-  type t =
-    | Int of int64
-    | Float of float
-    | String of string
-    | Builtin of Builtins.t
-    | Sum of t * t
-    | Product of t * t
-  [@@deriving compare, sexp]
-
-  let rec show = function
-    | Int i -> Int64.to_string i
-    | Float f -> Float.to_string f
-    | String s -> s
-    | Builtin b -> Builtins.show b
-    | Sum (a, b) -> show a ^ "|" ^ show b
-    | Product (a, b) -> show a ^ "*" ^ show b
-end
-
 module TypeSpec = struct
   (* TypeSpec is the type solver's idea of a "type" It's more like a "compile-time-known
      constraint" *)
   type t =
     | Any
-    | Const of Value.t
+    | ConstInt of int64
+    | ConstFloat of float
+    | ConstString of string
+    | Const of Builtins.t
+    | Record of (string option * t) list
     | InstanceOf of t (* e.g. 3 :: InstanceOf Int *)
     | TypeFor of t (* inverse of instanceof -- Int :: TypeFor (Const 3) *)
     | Applied of t * t list
@@ -66,17 +50,23 @@ module TypeSpec = struct
 
   let rec show = function
     | Any -> "*"
-    | Const c -> Value.show c
     | InstanceOf t -> "::" ^ show t
     | TypeFor t -> "@@" ^ show t
+    | ConstInt x -> Int64.to_string x
+    | ConstFloat x -> Float.to_string x
+    | ConstString s -> s
+    | Const b -> Builtins.show b
+    | Record record -> "{" ^ Sexp.to_string [%sexp (record : (string option * t) list)] ^ "}"
     | Applied (a, b) -> show a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
     | And (a, b) -> show a ^ " and " ^ show b
     | Overload items -> "overload:(" ^ (String.concat ~sep:"," @@ List.map ~f:show items) ^ ")"
     | Error -> "error"
 
   let get_type = function
-    | TypeFor t -> Const (Value.Builtin (Builtins.Custom "Type"))
-    | Const (Value.Int _) -> Const (Value.Builtin Builtins.INT64)
+    | TypeFor t -> Const (Builtins.Custom "Type")
+    | ConstInt _ -> Const Builtins.INT64
+    | ConstString _ -> Const Builtins.STR
+    | ConstFloat _ -> Const Builtins.FLOAT64
     | InstanceOf x -> x
     | t -> failwith @@ Sexp.to_string [%sexp "unknown type", (t : t)]
 
@@ -163,18 +153,16 @@ and match_call t expr : (Resolver.t * TypeSpec.t) Or_error.t =
       | [x] -> Ok x
       | x :: xs -> Ok x
       (* why do we take the first overload? *) )
-  | Applied (Const (Value.Builtin Builtins.ADD_INT), args) ->
+  | Applied (Const Builtins.ADD_INT, args) ->
       Printf.failwithf "add %s" (String.concat ~sep:", " @@ List.map ~f:TypeSpec.show args) ()
-  | Applied (Const (Value.Builtin Builtins.FUNC), params) -> Ok (t, expr)
-  | Applied (Applied (Const (Value.Builtin Builtins.FUNC), params), return) -> Ok (t, expr)
-  | Applied
-      (InstanceOf (Applied (Applied (Const (Value.Builtin Builtins.FUNC), params), return)), args)
-    ->
+  | Applied (Const Builtins.FUNC, params) -> Ok (t, expr)
+  | Applied (Applied (Const Builtins.FUNC, params), return) -> Ok (t, expr)
+  | Applied (InstanceOf (Applied (Applied (Const Builtins.FUNC, params), return)), args) ->
       let return_type =
         match return with
-        | [] -> Const (Value.Builtin Builtins.VOID)
+        | [] -> Const Builtins.VOID
         | [x] -> x
-        | items -> Applied (Const (Value.Builtin Builtins.TUPLE), items) in
+        | items -> Applied (Const Builtins.TUPLE, items) in
       Ok (t, TypeSpec.of_type return_type)
   | x -> Or_error.error_s [%sexp "failed match_call", (x : TypeSpec.t)]
 
@@ -195,18 +183,18 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
       let func_type =
         TypeSpec.(
           Applied
-            ( Applied (Const (Value.Builtin Builtins.FUNC), param_terms)
-            , match TypeSpec.get_type body_term with Const (Builtin VOID) -> [] | x -> [x] )) in
+            ( Applied (Const Builtins.FUNC, param_terms)
+            , match TypeSpec.get_type body_term with Const VOID -> [] | x -> [x] )) in
       (t, func_type)
   | Ast.Block {items; _} ->
       let t, item_types = check_types t items in
-      (t, TypeSpec.(InstanceOf (Const (Value.Builtin Builtins.VOID))))
+      (t, TypeSpec.(InstanceOf (Const Builtins.VOID)))
   | Ast.Let {name; typ; value; _} ->
       let t = check_type t value in
       t
-  | Ast.StringLiteral {literal; _} -> TypeSpec.(t, Const (Value.String literal))
-  | Ast.IntLiteral {value; _} -> TypeSpec.(t, Const (Value.Int value))
-  | Ast.FloatLiteral {value; _} -> TypeSpec.(t, Const (Value.Float value))
+  | Ast.StringLiteral {literal; _} -> TypeSpec.(t, ConstString literal)
+  | Ast.IntLiteral {value; _} -> TypeSpec.(t, ConstInt value)
+  | Ast.FloatLiteral {value; _} -> TypeSpec.(t, ConstFloat value)
   | Ast.Call {callee; args; _} ->
       let t, callee_type = check_type t callee in
       let t, args_types = List.fold_map ~init:t ~f:check_type args in
@@ -238,20 +226,20 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
           (Names.deref_member t.ns base member) in
       check_type t member_expr
   | Ast.TypeAlias {name; typ} -> check_type t typ
-  | Ast.TypeDecl {name; metatype; fields} -> (t, Const (Value.String name))
+  | Ast.TypeDecl {name; metatype; fields} -> (t, ConstString name)
   | Ast.Var {name; _} ->
       let reference =
         Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in
       let t = check_type t reference in
       t
-  | Ast.Builtin {builtin; _} -> (t, TypeSpec.Const (Value.Builtin builtin))
+  | Ast.Builtin {builtin; _} -> (t, TypeSpec.Const builtin)
   | Ast.Param {idx; name; typ; _} -> (
     match typ with
     | Some typ ->
         let t, typ_type = check_type t typ in
         TypeSpec.(t, InstanceOf typ_type)
     | None -> (t, TypeSpec.Any) )
-  | Ast.Tuple {items= []; _} -> (t, TypeSpec.Const (Value.Builtin Builtins.VOID))
+  | Ast.Tuple {items= []; _} -> (t, TypeSpec.Const Builtins.VOID)
   | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
 
 and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
@@ -278,17 +266,17 @@ and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
 and instantiate1 t callee callee_type args_types : Resolver.t * Instance.t =
   (* Actually instantiate without memoizing the instantiation *)
   match callee_type with
-  | TypeSpec.Const (Builtin FUNC) ->
+  | TypeSpec.Const FUNC ->
       let result_type = TypeSpec.Applied (callee_type, args_types) in
       (t, Instance.{callee; callee_type; args_types; result_type})
-  | TypeSpec.Applied (Const (Builtin FUNC), args) ->
+  | TypeSpec.Applied (Const FUNC, args) ->
       let result_type = TypeSpec.Applied (callee_type, args_types) in
       (t, Instance.{callee; callee_type; args_types; result_type})
-  | TypeSpec.InstanceOf (Applied (Applied (Const (Builtin FUNC), param_types), ret_types)) ->
+  | TypeSpec.InstanceOf (Applied (Applied (Const FUNC, param_types), ret_types)) ->
       let result_type =
         match ret_types with
-        | [] -> TypeSpec.Const (Builtin VOID)
+        | [] -> TypeSpec.Const VOID
         | [x] -> x
-        | items -> Applied (Const (Builtin TUPLE), items) in
+        | items -> Applied (Const TUPLE, items) in
       (t, Instance.{callee; callee_type; args_types; result_type})
   | _ -> failwith @@ Sexp.to_string [%sexp "unknown instantiation", {callee_type: TypeSpec.t}]
