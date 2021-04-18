@@ -14,7 +14,7 @@ func main():
   foo target
 |} in
   (match
-     let%map.Result imports = Utils.parse_with_imports src in
+     let%map.Result imports = Test_utils.parse_with_imports src in
      Coral_passes.Name_resolution.construct imports
   with
   | Ok names -> Coral_passes.Name_resolution.show names

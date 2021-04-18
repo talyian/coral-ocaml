@@ -3,7 +3,7 @@ open Coral_core
 open Coral_frontend
 
 let show_types source =
-  match let%bind.Result imports = Utils.parse_with_imports source in
+  match let%bind.Result imports = Test_utils.parse_with_imports source in
          let names = Coral_passes.Name_resolution.construct imports in
          let names = Coral_passes.Name_resolution.get_data names in
          let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
