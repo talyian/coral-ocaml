@@ -75,6 +75,8 @@ module Node = struct
         | Import {path; _} -> String.concat ~sep:"." path
         | StringLiteral {literal; _} ->
             sprintf "\"%s\"" (String.sub literal ~pos:0 ~len:(Int.min (String.length literal) 10))
+        | IntLiteral {literal; _} -> literal
+        | FloatLiteral {literal; _} -> literal
         | Builtin {builtin; _} -> Builtins.show builtin
         | Call {callee; _} -> name_of callee
         | Block _ -> ""
@@ -97,6 +99,7 @@ module Node = struct
         | _ -> "expr" in
       match !node with
       | Module {name; _} -> ( match name with "" -> "<module>" | n -> n )
+      | Func {name; _} -> name
       | Block _ -> "Block"
       | Tuple {items; _} -> "(" ^ (String.concat ~sep:", " @@ List.map ~f:show_short items) ^ ")"
       | StringLiteral {literal; _} ->

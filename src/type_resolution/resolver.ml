@@ -35,11 +35,33 @@ module TypeSpec = struct
   type t =
     | Any
     | Const of Value.t
-    | InstanceOf of t
-    | TypeFor of t
+    | InstanceOf of t (* e.g. 3 :: InstanceOf Int *)
+    | TypeFor of t (* inverse of instanceof -- Int :: TypeFor (Const 3) *)
     | Applied of t * t list
     | And of t * t
+    (* And means that multiple typespecs apply to a term.*)
     | Overload of t list
+    (* Overload is the OR for typespec. it means a term can be at least one of the
+         included typespecs.
+
+         It can be created from an set of overloaded functions
+         func foo(a): ...
+         @overload
+         func foo(b): ...
+
+         This means at any point foo can be one of the following types:
+         Func[][A]
+         Func[][B]
+
+         Overloaded values can arise from conditionals
+         let foo = if rand () then 3 else "3"
+
+         Or also from declaring an untagged union:
+         let foo : union { Int; String } = 3
+
+         let foo = (3 | "3")
+    *)
+    | Error
   [@@deriving compare, sexp]
 
   let rec show = function
@@ -50,11 +72,15 @@ module TypeSpec = struct
     | Applied (a, b) -> show a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
     | And (a, b) -> show a ^ " and " ^ show b
     | Overload items -> "overload:(" ^ (String.concat ~sep:"," @@ List.map ~f:show items) ^ ")"
+    | Error -> "error"
 
   let get_type = function
     | TypeFor t -> Const (Value.Builtin (Builtins.Custom "Type"))
     | Const (Value.Int _) -> Const (Value.Builtin Builtins.INT64)
+    | InstanceOf x -> x
     | t -> failwith @@ Sexp.to_string [%sexp "unknown type", (t : t)]
+
+  let of_type x = InstanceOf x
 end
 
 let show_table list =
@@ -102,6 +128,8 @@ module Resolver = struct
     |> Map.to_alist |> List.map ~f:snd |> show_table
 end
 
+let dump = Resolver.dump
+
 let rec construct ns (node : Ast.t) : Resolver.t =
   let t =
     {Resolver.ns; types= Map.empty (module Ast); instantiations= Map.empty (module InstanceArgs)}
@@ -120,46 +148,55 @@ and check_type t node : Resolver.t * TypeSpec.t =
 
 and check_types t nodes : Resolver.t * TypeSpec.t list = List.fold_map ~init:t ~f:check_type nodes
 
-and match_call t =
+and match_call t expr : (Resolver.t * TypeSpec.t) Or_error.t =
   let open TypeSpec in
-  function
+  match expr with
   | Applied (Overload items, args) -> (
       let message =
         Printf.sprintf "Trying to resolve overloads: %s"
           (String.concat ~sep:" " @@ List.map ~f:TypeSpec.show args) in
-      match List.filter_mapi items ~f:(fun i callee -> match_call t (Applied (callee, args))) with
-      | [] ->
-          Stdio.print_s [%sexp "no solutions for overload"] ;
-          None
-      | [x] -> Some x
-      | x :: xs -> Some x )
+      match
+        List.filter_mapi items ~f:(fun i callee ->
+            match_call t (Applied (callee, args)) |> Result.ok)
+      with
+      | [] -> Or_error.error_s [%sexp "no solutions for overload"]
+      | [x] -> Ok x
+      | x :: xs -> Ok x
+      (* why do we take the first overload? *) )
   | Applied (Const (Value.Builtin Builtins.ADD_INT), args) ->
       Printf.failwithf "add %s" (String.concat ~sep:", " @@ List.map ~f:TypeSpec.show args) ()
-  | Applied (Const (Value.Builtin Builtins.FUNC), args) as x -> Some (t, x)
-  | Applied (Applied (Applied (Const (Value.Builtin Builtins.FUNC), return), params), args) ->
-      Stdio.printf "call of func type:\n  %s\n  %s\n  %s\n"
-        (List.map ~f:show return |> String.concat ~sep:"; ")
-        (List.map ~f:show params |> String.concat ~sep:"; ")
-        (List.map ~f:show args |> String.concat ~sep:"; ") ;
-      Stdio.printf "TODO: unify args and params\n" ;
+  | Applied (Const (Value.Builtin Builtins.FUNC), params) -> Ok (t, expr)
+  | Applied (Applied (Const (Value.Builtin Builtins.FUNC), params), return) -> Ok (t, expr)
+  | Applied
+      (InstanceOf (Applied (Applied (Const (Value.Builtin Builtins.FUNC), params), return)), args)
+    ->
       let return_type =
         match return with
         | [] -> Const (Value.Builtin Builtins.VOID)
         | [x] -> x
         | items -> Applied (Const (Value.Builtin Builtins.TUPLE), items) in
-      Some (t, return_type)
-  | x ->
-      Stdio.print_s [%sexp "failed match_call", (x : TypeSpec.t)] ;
-      None
+      Ok (t, TypeSpec.of_type return_type)
+  | x -> Or_error.error_s [%sexp "failed match_call", (x : TypeSpec.t)]
 
-and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
+and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
+  (* Given an ast node, return the compile-time value of that node.
+     Simplified: this gets you what type something is
+         e.g. check_type (let x:foo) = ::foo
+              check_type 3           = ::Int
+              check_type "3"         = ::String
+     More in-depth: it actually preserves constant info
+              check_type 3           = Const Int 3
+              check_type (3 + 4)     = Const Int 7
+  *)
   match !node with
   | Ast.Func {name; ret_type; params; body} ->
-      let t, param_types = check_types t params in
-      let t, body_type = check_type t body in
+      let t, param_terms = check_types t params in
+      let t, body_term = check_type t body in
       let func_type =
         TypeSpec.(
-          Applied (Applied (Const (Value.Builtin Builtins.FUNC), [body_type]), param_types)) in
+          Applied
+            ( Applied (Const (Value.Builtin Builtins.FUNC), param_terms)
+            , match TypeSpec.get_type body_term with Const (Builtin VOID) -> [] | x -> [x] )) in
       (t, func_type)
   | Ast.Block {items; _} ->
       let t, item_types = check_types t items in
@@ -170,30 +207,23 @@ and check_type_raw (t : Resolver.t) node : Resolver.t * TypeSpec.t =
   | Ast.StringLiteral {literal; _} -> TypeSpec.(t, Const (Value.String literal))
   | Ast.IntLiteral {value; _} -> TypeSpec.(t, Const (Value.Int value))
   | Ast.FloatLiteral {value; _} -> TypeSpec.(t, Const (Value.Float value))
-  (* | Ast.Call {callee; args= [{contents= Ast.List {items= args; _}}]; _}
-   *  |Ast.Index {callee; args; _} *)
   | Ast.Call {callee; args; _} ->
       let t, callee_type = check_type t callee in
       let t, args_types = List.fold_map ~init:t ~f:check_type args in
       (* Is callee_type generic? Then we need to create an instance of callee *)
       let instance_type = instantiate t callee callee_type args_types in
-      Stdio.print_s [%sexp "resolving call", (callee : Ast.Node.t), (args : Ast.Node.t list)] ;
-      ( match callee_type with
-      | TypeSpec.Const (Value.Builtin Builtins.FUNC) -> ()
-      | _ -> (
-        match TypeSpec.get_type callee_type with
-        | callee_kind ->
-            if false then
-              failwith
-              @@ Sexp.to_string [%sexp (callee_type : TypeSpec.t), (callee_kind : TypeSpec.t)]
-            else () ) ) ;
+      (* Stdio.print_s [%sexp "resolving call", (callee : Ast.Node.t), (args : Ast.Node.t list)] ; *)
+      (* match callee_type with
+       * | TypeSpec.Const (Builtin FUNC) -> (t, TypeSpec.Applied (callee_type, args_types))
+       * | Applied (Const (Builtin FUNC), args) -> (t, TypeSpec.Applied (callee_type, args_types))
+       * | _ -> *)
       let sol = match_call t (TypeSpec.Applied (callee_type, args_types)) in
-      Option.value_exn ~message:("type check call failed: " ^ TypeSpec.show callee_type) sol
+      Or_error.ok_exn sol
   | Ast.Index {callee; args; _} ->
       let t, callee_type = check_type t callee in
       let t, args_types = List.fold_map ~init:t ~f:check_type args in
       let sol = match_call t (TypeSpec.Applied (callee_type, args_types)) in
-      Option.value_exn ~message:("type check index failed: " ^ TypeSpec.show callee_type) sol
+      Or_error.ok_exn sol
   | Ast.Overload {name; items; _} ->
       let t, item_types = List.fold_map ~init:t ~f:check_type items in
       (t, TypeSpec.Overload item_types)
@@ -237,7 +267,7 @@ and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
   match Map.find t.instantiations (callee, args_types) with
   | Some existing -> (t, existing.result_type)
   | None ->
-      Stdio.print_s [%sexp (callee : Ast.t), (args_types : TypeSpec.t list)] ;
+      (* Stdio.print_s [%sexp "instantiate", (callee : Ast.t), (args_types : TypeSpec.t list)] ; *)
       let t, new_instance = instantiate1 t callee callee_type args_types in
       let t =
         { t with
@@ -247,17 +277,18 @@ and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
 
 and instantiate1 t callee callee_type args_types : Resolver.t * Instance.t =
   (* Actually instantiate without memoizing the instantiation *)
-  let rec handle = function
-    | {contents= Ast.Func func} as callee ->
-        let result_type = TypeSpec.Any in
-        let instance = Instance.{callee; callee_type; args_types; result_type} in
-        (t, instance)
-    | {contents= Ast.Builtin {builtin= Builtins.FUNC; _}} as callee ->
-        let result_type = TypeSpec.Any in
-        let instance = Instance.{callee; callee_type; args_types; result_type} in
-        (t, instance)
-    | {contents= Ast.Var _} as callee -> handle (Option.value_exn (Names.deref_var t.ns callee))
-    | callee ->
-        failwith
-        @@ Sexp.to_string [%sexp "instantiating call of unknown type", (callee : Ast.Node.t)] in
-  handle callee
+  match callee_type with
+  | TypeSpec.Const (Builtin FUNC) ->
+      let result_type = TypeSpec.Applied (callee_type, args_types) in
+      (t, Instance.{callee; callee_type; args_types; result_type})
+  | TypeSpec.Applied (Const (Builtin FUNC), args) ->
+      let result_type = TypeSpec.Applied (callee_type, args_types) in
+      (t, Instance.{callee; callee_type; args_types; result_type})
+  | TypeSpec.InstanceOf (Applied (Applied (Const (Builtin FUNC), param_types), ret_types)) ->
+      let result_type =
+        match ret_types with
+        | [] -> TypeSpec.Const (Builtin VOID)
+        | [x] -> x
+        | items -> Applied (Const (Builtin TUPLE), items) in
+      (t, Instance.{callee; callee_type; args_types; result_type})
+  | _ -> failwith @@ Sexp.to_string [%sexp "unknown instantiation", {callee_type: TypeSpec.t}]

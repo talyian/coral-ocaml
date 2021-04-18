@@ -25,13 +25,13 @@ func main():
         [Var-Cstr] -> Let-Cstr
         [Var-Func] -> Builtin-FUNC
         [Var-Uint64] -> Builtin-UINT64
-        [Var-foo] -> Func-foo
+        [Var-foo] -> foo
         [Var-printf] -> Extern-printf
         [Var-target] -> Let-target
         [Var-world] -> Param-world
     Names.members
-        [<module>.foo] -> Func-foo
-        [<module>.main] -> Func-main
+        [<module>.foo] -> foo
+        [<module>.main] -> main
         [<module>.printf] -> Extern-printf
         [raw_clib.Cstr] -> Let-Cstr
         [raw_clib.free] -> Extern-free

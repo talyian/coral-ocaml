@@ -2,51 +2,61 @@ open Base
 open Coral_core
 open Coral_frontend
 
-let%expect_test "types - hello world" =
-  match let%bind.Result imports = Utils.parse_with_imports {|
-extern("c", "printf", Func[...][])
-
-func main ():
-  printf("Hello, %.*s\n", 6, "World!")
-|} in
+let show_types source =
+  match let%bind.Result imports = Utils.parse_with_imports source in
          let names = Coral_passes.Name_resolution.construct imports in
          let names = Coral_passes.Name_resolution.get_data names in
          let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
          let types = Coral_types.Resolver.construct names main in
      Ok types with
-  | Ok types -> ()
+  | Ok types ->
+    Coral_types.Resolver.dump types;
   | Error e ->
     Stdio.print_endline @@ Frontend.show_parseError e;
-  [%expect.unreachable]
-[@@expect.uncaught_exn {|
-  (* CR expect_test_collector: This test expectation appears to contain a backtrace.
-     This is strongly discouraged as backtraces are fragile.
-     Please change this test to not include a backtrace. *)
+  | exception e ->
+    Stdio.print_endline @@ Exn.to_string e
+;;
 
-  (Failure
-    "(\"instantiating call of unknown type\"(Call(callee(Var Func))(args((Var ...)))))")
-  Raised at Stdlib.failwith in file "stdlib.ml", line 29, characters 17-33
-  Called from Coral_types__Resolver.instantiate in file "src/type_resolution/resolver.ml", line 241, characters 28-72
-  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 179, characters 26-69
-  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
-  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 201, characters 24-40
-  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
-  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
-  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 176, characters 27-46
-  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
-  Called from Coral_types__Resolver.check_type_raw in file "src/type_resolution/resolver.ml", line 159, characters 25-42
-  Called from Coral_types__Resolver.check_type in file "src/type_resolution/resolver.ml", line 117, characters 25-46
-  Called from Coral_types__Resolver.construct in file "src/type_resolution/resolver.ml", line 109, characters 9-112
-  Called from Tests__Type_resolution.(fun) in file "test/type_resolution.ml", line 15, characters 21-62
-  Called from Tests__Type_resolution.(fun) in file "test/type_resolution.ml", line 6, characters 8-461
-  Called from Expect_test_collector.Make.Instance.exec in file "collector/expect_test_collector.ml", line 244, characters 12-19
+let%expect_test "types - hello world" =
+  show_types {|
+extern("c", "printf", Func[...][])
 
-  Trailing output
-  ---------------
-  ((Var Func) ((Const (Builtin ELLIPSIS))))
-  ("resolving call" (Var Func) ((Var ...)))
-  ((Call (callee (Var Func)) (args ((Var ...)))) ()) |}]
-(* open Base
+func main ():
+  printf("Hello, %s\n", "World")
+|};
+    [%expect {|
+      Call-Func        FUNC[ELLIPSIS][]
+      Call-Func        FUNC[ELLIPSIS]
+      Call-printf      ::VOID
+      Extern-printf    ::FUNC[ELLIPSIS][]
+      main             FUNC[][]
+      "Hello, %s\n"    Hello, %s
+
+      "World"          World
+      Var-...          ELLIPSIS
+      Var-Func         FUNC
+      Var-printf       ::FUNC[ELLIPSIS][]
+      Builtin-FUNC     FUNC
+      Builtin-ELLIPSIS ELLIPSIS |}]
+
+let%expect_test "types - literals" =
+  show_types {|
+func main ():
+  let x = "3"
+  let y = 3
+  let z = 3.0
+|};
+    [%expect {|
+      main     FUNC[][]
+      expr-3   3
+      expr-3.0 3.
+      "3"      3
+      Let-x    3
+      Let-y    3
+      Let-z    3.
+      Block    ::VOID |}]
+
+    (* open Base
  * open Coral_core
  * open Coral_frontend
  *
