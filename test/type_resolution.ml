@@ -60,15 +60,20 @@ func main ():
   let d = typeof(x, y, z)
 |} in
   show_line types "Let-c";
-  [%expect "{(STR INT64 FLOAT64)}"];
+  [%expect{| {(STR INT64 FLOAT64)} |}];
   show_line types "Let-d";
-  [%expect "TUPLE[3, 3, 3.]"]
+  [%expect{| TUPLE[3, 3, 3.] |}]
 
 let%expect_test "types - imports" =
   show_types {|
-import raw_clib
+let Cstr = Ptr[Uint8]
+
+extern("c", "malloc", Func[Cstr][Uint64])
+extern("c", "free"  , Func[][Cstr])
+extern("c", "printf", Func[][Cstr, ...])
+
 func main():
-  raw_clib.printf("Hello, %g", 3.1416)
+  printf("Hello, %g", 3.1416)
 |}
     ;[%expect {| "name not found: Ptr" |}]
     (* open Base

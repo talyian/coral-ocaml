@@ -24,7 +24,9 @@ func main():
         [Var-...] -> Builtin-ELLIPSIS
         [Var-Cstr] -> Let-Cstr
         [Var-Func] -> Builtin-FUNC
+        [Var-Ptr] -> Builtin-PTR
         [Var-Uint64] -> Builtin-UINT64
+        [Var-Uint8] -> Builtin-UINT8
         [Var-foo] -> foo
         [Var-printf] -> Extern-printf
         [Var-target] -> Let-target

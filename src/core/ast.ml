@@ -116,6 +116,9 @@ module Node = struct
   type node = t [@@deriving compare, sexp_of, show {with_path= false}]
 
   let fold_map ~(init : 'state) ~(f : 'state -> t -> 'state * t) (expr : t) =
+    let bind1 f v = match Option.map ~f v with
+      | Some(init, v) -> init, Some v
+      | None -> init, None in
     match !expr with
     | Module m ->
         let init, lines = List.fold_map ~init ~f m.lines in
@@ -133,11 +136,29 @@ module Node = struct
     | List {items} ->
         let init, items = List.fold_map ~init ~f items in
         (init, ref @@ List {items})
-    | Import _ | Extern _ | Func _ | Param _ | Comment _ | Binop _ | If _ | IntLiteral _
-     |FloatLiteral _ | CharLiteral _ | StringLiteral _ | Var _ | Let _ | Set _ | Index _
-     |Member _ | Return _ | Builtin _ | Overload _ | Empty | Type _ | Decorated _ | TypeDecl _
-     |TypeAlias _ ->
-        (init, expr)
+    | Index c ->
+        let init, callee = f init c.callee in
+        let init, args = List.fold_map ~init ~f c.args in
+        (init, ref @@ Call {callee; args})
+    | Let x ->
+        let init, value = f init x.value in
+        let init, typ =
+          match Option.map ~f:(f init) x.typ with
+          | Some (init, typ) -> (init, Some typ)
+          | None -> (init, None) in
+        (init, ref @@ Let {name= x.name; typ; value})
+    | StringLiteral _ | CharLiteral _ | IntLiteral _ | FloatLiteral _ | Var _ -> (init, expr)
+    | Extern {name; binding; typ} ->
+        let init, typ = f init typ in
+        (init, ref @@ Extern {name; binding; typ})
+    | Func {name; params; ret_type; body} ->
+       let init, ret_type = bind1 (f init) ret_type in
+       let init, params = List.fold_map ~init  ~f params in
+       let init, body = f init body in
+       init, ref @@ Func {name; params; ret_type; body}
+    | Import _ | Param _ | Comment _ | Binop _ | If _ | Set _ | Member _ | Return _
+     |Builtin _ | Overload _ | Empty | Type _ | Decorated _ | TypeDecl _ | TypeAlias _ ->
+        failwith @@ Sexp.to_string [%sexp "unimplemented", (expr : node)]
 
   let fold ~init ~f expr = fst @@ fold_map ~init ~f:(fun state t -> (f state t, t)) expr
 end
