@@ -2,13 +2,16 @@ open Base
 open Coral_core
 open Coral_frontend
 
-let show_types source =
-  match let%bind.Result imports = Test_utils.parse_with_imports source in
-         let names = Coral_passes.Name_resolution.construct imports in
-         let names = Coral_passes.Name_resolution.get_data names in
-         let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
-         let types = Coral_types.Resolver.construct names main in
-     Ok types with
+let get_types source =
+  let%bind.Result imports = Test_utils.parse_with_imports source in
+    let names = Coral_passes.Name_resolution.construct imports in
+    let names = Coral_passes.Name_resolution.get_data names in
+    let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
+    let types = Coral_types.Resolver.construct names main in
+  Ok types
+
+let show_types source = match get_types source
+with
   | Ok types ->
     Coral_types.Resolver.dump types;
   | Error e ->
@@ -16,6 +19,14 @@ let show_types source =
   | exception e ->
     Stdio.print_endline @@ Exn.to_string e
 ;;
+
+let show_line types line =
+  match types with
+  | Ok (types:Coral_types.Resolver.Resolver.t) ->
+    Map.filter_keys ~f:(fun k -> String.(Ast.show_short k = line))  types.types
+    |> Map.min_elt_exn |> snd |> Coral_types.Resolver.TypeSpec.show
+    |> Stdio.print_endline
+  | _ -> ()
 
 let%expect_test "types - hello world" =
   show_types {|
@@ -40,22 +51,26 @@ func main ():
       Builtin-ELLIPSIS ELLIPSIS |}]
 
 let%expect_test "types - literals" =
-  show_types {|
+  let types = get_types {|
 func main ():
   let x = "3"
   let y = 3
   let z = 3.0
-|};
-    [%expect {|
-      main     FUNC[][]
-      expr-3   3
-      expr-3.0 3.
-      "3"      3
-      Let-x    3
-      Let-y    3
-      Let-z    3.
-      Block    ::VOID |}]
+  let c = (typeof x, typeof y, typeof z)
+  let d = typeof(x, y, z)
+|} in
+  show_line types "Let-c";
+  [%expect "{(STR INT64 FLOAT64)}"];
+  show_line types "Let-d";
+  [%expect "TUPLE[3, 3, 3.]"]
 
+let%expect_test "types - imports" =
+  show_types {|
+import raw_clib
+func main():
+  raw_clib.printf("Hello, %g", 3.1416)
+|}
+    ;[%expect {| "name not found: Ptr" |}]
     (* open Base
  * open Coral_core
  * open Coral_frontend

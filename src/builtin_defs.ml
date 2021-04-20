@@ -12,12 +12,12 @@ let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> '
   |> def "Func" (builtin FUNC)
   |> def "..." @@ builtin @@ ELLIPSIS
   |> def "Str" @@ builtin @@ STR
-  |> def "Uint8" @@ builtin @@ UINT8
-  |> def "Uint32" @@ builtin @@ UINT32
-  |> def "Uint64" @@ builtin @@ UINT64
   |> def "Int8" @@ builtin @@ INT8
   |> def "Int32" @@ builtin @@ INT32
   |> def "Int64" @@ builtin @@ INT64
+  |> def "Uint8" @@ builtin @@ UINT8
+  |> def "Uint32" @@ builtin @@ UINT32
+  |> def "Uint64" @@ builtin @@ UINT64
   |> def "IntSize" @@ builtin @@ INTNATIVE
   |> def "UintSize" @@ builtin @@ INTNATIVE
   |> def "Float64" @@ builtin @@ FLOAT64
@@ -35,3 +35,6 @@ let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> '
   |> def "<=" (overload "<=" [LTE_INT; LTE_FLOAT])
   |> def ">=" (overload ">=" [GTE_INT; GTE_FLOAT])
   |> def "overload" @@ builtin @@ Custom "overload"
+  |> def "typeof" @@ builtin @@ TYPEOF
+  |> def "addrof" (builtin ADDROF)
+  |> def "deref" (builtin DEREF)

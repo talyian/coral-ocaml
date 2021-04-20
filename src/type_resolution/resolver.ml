@@ -46,7 +46,26 @@ module TypeSpec = struct
          let foo = (3 | "3")
     *)
     | Error
-  [@@deriving compare, sexp]
+  [@@deriving compare]
+
+  let rec sexp_of_t = function
+    | Const b -> Builtins.sexp_of_t b
+    | ConstInt i -> Int64.sexp_of_t i
+    | Record fields ->
+        let sexp_of_field (name, value) =
+          match name with
+          | None -> [sexp_of_t value]
+          | Some n -> [String.sexp_of_t n; sexp_of_t value] in
+        Sexp.List (List.concat_map ~f:sexp_of_field fields)
+    | Any -> Sexp.Atom "*"
+    | Error -> Sexp.Atom "Error"
+    | ConstFloat f -> Float.sexp_of_t f
+    | ConstString s -> Atom s
+    | InstanceOf x -> List [Atom "instance_of"; sexp_of_t x]
+    | TypeFor x -> List [Atom "type_for"; sexp_of_t x]
+    | Applied (a, bs) -> List ([Sexp.Atom "Applied"; sexp_of_t a] @ List.map ~f:sexp_of_t bs)
+    | And (a, b) -> List [Atom "a"; sexp_of_t a; sexp_of_t b]
+    | Overload xs -> List ([Sexp.Atom "Overload"] @ List.map ~f:sexp_of_t xs)
 
   let rec show = function
     | Any -> "*"
@@ -56,7 +75,7 @@ module TypeSpec = struct
     | ConstFloat x -> Float.to_string x
     | ConstString s -> s
     | Const b -> Builtins.show b
-    | Record record -> "{" ^ Sexp.to_string [%sexp (record : (string option * t) list)] ^ "}"
+    | Record record as r -> "{" ^ Sexp.to_string [%sexp (r : t)] ^ "}"
     | Applied (a, b) -> show a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
     | And (a, b) -> show a ^ " and " ^ show b
     | Overload items -> "overload:(" ^ (String.concat ~sep:"," @@ List.map ~f:show items) ^ ")"
@@ -81,7 +100,7 @@ end
 
 (* an instance is keyed on a callee node * the static types of the arguments *)
 module InstanceArgs = struct
-  module T = struct type t = Ast.t * TypeSpec.t list [@@deriving compare, sexp] end
+  module T = struct type t = Ast.t * TypeSpec.t list [@@deriving compare, sexp_of] end
   include T
   include Comparable.Make (T)
 end
@@ -149,6 +168,9 @@ and match_call t expr : (Resolver.t * TypeSpec.t) Or_error.t =
         | [x] -> x
         | items -> Applied (Const Builtins.TUPLE, items) in
       Ok (t, TypeSpec.of_type return_type)
+  | Applied (Const TYPEOF, [arg]) -> Ok (t, TypeSpec.get_type arg)
+  | Applied (Const TYPEOF, args) ->
+      Ok (t, TypeSpec.Applied (Const TUPLE, List.map ~f:(fun arg -> arg) args))
   | x -> Or_error.error_s [%sexp "failed match_call", (x : TypeSpec.t)]
 
 and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
@@ -224,7 +246,10 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
         let t, typ_type = check_type t typ in
         TypeSpec.(t, InstanceOf typ_type)
     | None -> (t, TypeSpec.Any) )
-  | Ast.Tuple {items= []; _} -> (t, TypeSpec.Const Builtins.VOID)
+  | Ast.Tuple {items= []} -> (t, TypeSpec.Const Builtins.VOID)
+  | Ast.Tuple {items} ->
+      let t, item_types = List.fold_map ~init:t ~f:check_type items in
+      (t, TypeSpec.Record (List.map ~f:(fun x -> (None, x)) item_types))
   | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
 
 and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
@@ -250,6 +275,7 @@ and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =
 
 and instantiate1 t callee callee_type args_types : Resolver.t * Instance.t =
   (* Actually instantiate without memoizing the instantiation *)
+  (* TODO: this seems to repeat the match that we find in match_call *)
   match callee_type with
   | TypeSpec.Const FUNC ->
       let result_type = TypeSpec.Applied (callee_type, args_types) in
@@ -263,5 +289,8 @@ and instantiate1 t callee callee_type args_types : Resolver.t * Instance.t =
         | [] -> TypeSpec.Const VOID
         | [x] -> x
         | items -> Applied (Const TUPLE, items) in
+      (t, Instance.{callee; callee_type; args_types; result_type})
+  | Const TYPEOF ->
+      let result_type = TypeSpec.get_type (List.hd_exn args_types) in
       (t, Instance.{callee; callee_type; args_types; result_type})
   | _ -> failwith @@ Sexp.to_string [%sexp "unknown instantiation", {callee_type: TypeSpec.t}]

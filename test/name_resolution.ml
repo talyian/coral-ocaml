@@ -19,7 +19,7 @@ func main():
   with
   | Ok names -> Coral_passes.Name_resolution.show names
   | Error e -> Stdio.print_endline @@ Frontend.show_parseError e);
-  [%expect {|
+  [%expect{|
     Names
         [Var-...] -> Builtin-ELLIPSIS
         [Var-Cstr] -> Let-Cstr

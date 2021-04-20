@@ -62,6 +62,9 @@ type t =
   | TUPLE
   | ELLIPSIS
   (* intrinsics *)
+  | TYPEOF
+  | DEREF
+  | ADDROF
   (* custom *)
   | Custom of string
 [@@deriving show {with_path= false}, sexp, compare, equal]
