@@ -24,7 +24,7 @@
 
 type Flags = Int32
 type Fd = struct { val:Int32 }
-extern("c", "open", Func[Fd][pathname:Ptr[Uint8], flags:Flags]) # returns -1 on error and sets errno
-extern("c", "close", Func[Int32][Fd]) # returns SUCCESS=0,  -1 on error and sets errno,
-extern("c", "read", Func[IntSize][Fd, buf:Ptr[Uint8], count:UintSize]) # returns num bytes read, 0 = eof, -1 on error and sets errno
+extern("c", "open", Func[pathname:Ptr[Uint8], flags:Flags][Fd]) # returns -1 on error and sets errno
+extern("c", "close", Func[Fd][Int32]) # returns SUCCESS=0,  -1 on error and sets errno,
+extern("c", "read", Func[Fd, buf:Ptr[Uint8], count:UintSize][IntSize]) # returns num bytes read, 0 = eof, -1 on error and sets errno
 extern("c", "dup", Func[Fd][Fd]) # returns -1 on error and sets errno

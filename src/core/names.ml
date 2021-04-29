@@ -9,6 +9,7 @@ module Member = struct
 end
 
 type t = {names: Ast.t Map.M(Ast).t; returns: Ast.t Map.M(Ast).t; members: Ast.t Map.M(Member).t}
+[@@deriving sexp]
 
 let deref_var t key = Map.find t.names key
 let deref_return t key = Map.find t.returns key

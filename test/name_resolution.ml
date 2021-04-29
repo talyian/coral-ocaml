@@ -24,6 +24,8 @@ func main():
         [Var-...] -> Builtin-ELLIPSIS
         [Var-Cstr] -> Let-Cstr
         [Var-Func] -> Builtin-FUNC
+        [Var-Int32] -> Builtin-INT32
+        [Var-Int64] -> Builtin-INT64
         [Var-Ptr] -> Builtin-PTR
         [Var-Uint64] -> Builtin-UINT64
         [Var-Uint8] -> Builtin-UINT8
@@ -38,4 +40,7 @@ func main():
         [raw_clib.Cstr] -> Let-Cstr
         [raw_clib.free] -> Extern-free
         [raw_clib.malloc] -> Extern-malloc
+        [raw_clib.memcpy] -> Extern-memcpy
+        [raw_clib.memmove] -> Extern-memmove
+        [raw_clib.memset] -> Extern-memset
         [raw_clib.printf] -> Extern-printf |}]

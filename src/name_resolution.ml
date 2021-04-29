@@ -39,10 +39,11 @@ module NameTraversal = struct
 
   let merge data imported_names =
     { data with
-      refs= Map.merge_skewed data.refs imported_names.refs ~combine:(fun ~key v1 v2 -> v1)
-    ; returns= Map.merge_skewed data.returns imported_names.returns ~combine:(fun ~key v1 v2 -> v1)
-    ; members= Map.merge_skewed data.members imported_names.members ~combine:(fun ~key v1 v2 -> v1)
-    }
+      refs= Map.merge_skewed data.refs imported_names.refs ~combine:(fun ~key:_ v1 _ -> v1)
+    ; returns=
+        Map.merge_skewed data.returns imported_names.returns ~combine:(fun ~key:_ v1 _ -> v1)
+    ; members=
+        Map.merge_skewed data.members imported_names.members ~combine:(fun ~key:_ v1 _ -> v1) }
 end
 
 type t = NameTraversal.t
@@ -50,7 +51,7 @@ type t = NameTraversal.t
 (* Builds a Names.t by traversing an Ast *)
 let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
   let run = run imports in
-  match !node with
+  match Ast.Sexp_ref.( ! ) node with
   | Ast.Var {name; _} ->
       let reference = Scope.find ~name data.current_scope in
       let reference = Option.value_exn ~message:("Name not found: " ^ name) reference in
@@ -115,16 +116,16 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
       let data = {data with current_scope= outer_scope} in
       let scope = Scope.add name node data.current_scope in
       {data with current_scope= scope}
-  | Member {base; member} ->
+  | Member {base; _} ->
       let data = run data base in
       data
-  | Ast.Module {name; lines} ->
+  | Ast.Module _ ->
       (* current_scope starts off in a global or outer scope, so make a new scope for this module *)
       let data = {data with current_scope= Scope.nest data.current_scope} in
       let data = Ast.fold ~init:data ~f:run node in
       let data =
         match data.current_scope with
-        | Scope {parents; names} ->
+        | Scope {names; _} ->
             Map.fold names ~init:data ~f:(fun ~key ~data dd ->
                 let members =
                   Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
@@ -133,10 +134,8 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
   | Ast.Type {typ} ->
       Ast.show typ |> Stdio.print_endline ;
       Caml.exit 0
-  | Ast.TypeDecl {name; metatype; fields; _} ->
-      {data with current_scope= Scope.add name node data.current_scope}
-  | Ast.TypeAlias {name; typ; _} ->
-      {data with current_scope= Scope.add name node data.current_scope}
+  | Ast.TypeDecl {name; _} -> {data with current_scope= Scope.add name node data.current_scope}
+  | Ast.TypeAlias {name; _} -> {data with current_scope= Scope.add name node data.current_scope}
   | _ -> Ast.fold ~init:data ~f:run node
 
 let show n =

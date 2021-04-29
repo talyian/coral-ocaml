@@ -71,9 +71,9 @@ module TypeSpec = struct
     | Any -> "*"
     | InstanceOf t -> "::" ^ show t
     | TypeFor t -> "@@" ^ show t
-    | ConstInt x -> Int64.to_string x
-    | ConstFloat x -> Float.to_string x
-    | ConstString s -> s
+    | ConstInt x -> Int64.to_string x ^ "i"
+    | ConstFloat x -> Float.to_string x ^ "f"
+    | ConstString s -> "'" ^ s ^ "'"
     | Const b -> Builtins.show b
     | Record record as r -> "{" ^ Sexp.to_string [%sexp (r : t)] ^ "}"
     | Applied (a, b) -> show a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
@@ -142,36 +142,37 @@ and check_type t node : Resolver.t * TypeSpec.t =
 
 and check_types t nodes : Resolver.t * TypeSpec.t list = List.fold_map ~init:t ~f:check_type nodes
 
-and match_call t expr : (Resolver.t * TypeSpec.t) Or_error.t =
+and match_call t (expr, args) : (Resolver.t * TypeSpec.t) Or_error.t =
   let open TypeSpec in
-  match expr with
-  | Applied (Overload items, args) -> (
+  match (expr, args) with
+  | Overload items, args -> (
       let message =
         Printf.sprintf "Trying to resolve overloads: %s"
           (String.concat ~sep:" " @@ List.map ~f:TypeSpec.show args) in
       match
-        List.filter_mapi items ~f:(fun i callee ->
-            match_call t (Applied (callee, args)) |> Result.ok)
+        List.filter_mapi items ~f:(fun i callee -> match_call t (callee, args) |> Result.ok)
       with
       | [] -> Or_error.error_s [%sexp "no solutions for overload"]
       | [x] -> Ok x
       | x :: xs -> Ok x
       (* why do we take the first overload? *) )
-  | Applied (Const Builtins.ADD_INT, args) ->
-      Printf.failwithf "add %s" (String.concat ~sep:", " @@ List.map ~f:TypeSpec.show args) ()
-  | Applied (Const Builtins.FUNC, params) -> Ok (t, expr)
-  | Applied (Applied (Const Builtins.FUNC, params), return) -> Ok (t, expr)
-  | Applied (InstanceOf (Applied (Applied (Const Builtins.FUNC, params), return)), args) ->
+  | Const Builtins.ADD_INT, args ->
+      Or_error.errorf "add %s" (String.concat ~sep:", " @@ List.map ~f:TypeSpec.show args)
+  | Const Builtins.ADD_PTR_INT, args -> Ok (t, TypeSpec.Any)
+  | Const Builtins.PTR, params -> Ok (t, expr)
+  | Const Builtins.FUNC, params -> Ok (t, expr)
+  | Applied (Const Builtins.FUNC, params), return -> Ok (t, expr)
+  | InstanceOf (Applied (Applied (Const Builtins.FUNC, params), return)), args ->
       let return_type =
         match return with
         | [] -> Const Builtins.VOID
         | [x] -> x
         | items -> Applied (Const Builtins.TUPLE, items) in
       Ok (t, TypeSpec.of_type return_type)
-  | Applied (Const TYPEOF, [arg]) -> Ok (t, TypeSpec.get_type arg)
-  | Applied (Const TYPEOF, args) ->
-      Ok (t, TypeSpec.Applied (Const TUPLE, List.map ~f:(fun arg -> arg) args))
-  | x -> Or_error.error_s [%sexp "failed match_call", (x : TypeSpec.t)]
+  | Const TYPEOF, [arg] -> Ok (t, TypeSpec.get_type arg)
+  | Const TYPEOF, args -> Ok (t, TypeSpec.Applied (Const TUPLE, List.map ~f:(fun arg -> arg) args))
+  | x ->
+      Or_error.error_s [%sexp "failed match_call", (expr : TypeSpec.t), (args : TypeSpec.t list)]
 
 and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
   (* Given an ast node, return the compile-time value of that node.
@@ -183,7 +184,7 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
               check_type 3           = Const Int 3
               check_type (3 + 4)     = Const Int 7
   *)
-  match !node with
+  match Ast.Sexp_ref.( ! ) node with
   | Ast.Func {name; ret_type; params; body} ->
       let t, param_terms = check_types t params in
       let t, body_term = check_type t body in
@@ -212,18 +213,19 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
        * | TypeSpec.Const (Builtin FUNC) -> (t, TypeSpec.Applied (callee_type, args_types))
        * | Applied (Const (Builtin FUNC), args) -> (t, TypeSpec.Applied (callee_type, args_types))
        * | _ -> *)
-      let sol = match_call t (TypeSpec.Applied (callee_type, args_types)) in
+      let sol = match_call t (callee_type, args_types) in
       Or_error.ok_exn sol
   | Ast.Index {callee; args; _} ->
       let t, callee_type = check_type t callee in
       let t, args_types = List.fold_map ~init:t ~f:check_type args in
-      let sol = match_call t (TypeSpec.Applied (callee_type, args_types)) in
+      let sol = match_call t (callee_type, args_types) in
       Or_error.ok_exn sol
   | Ast.Overload {name; items; _} ->
       let t, item_types = List.fold_map ~init:t ~f:check_type items in
       (t, TypeSpec.Overload item_types)
   | Ast.Extern {name; typ; _} ->
       let t, typ_type = check_type t typ in
+      Stdio.print_s [%sexp "extern", {name: string; typ: Ast.t; typ_type: TypeSpec.t}] ;
       (t, TypeSpec.InstanceOf typ_type)
   | Ast.Member {base; member} ->
       let member_expr =
@@ -237,8 +239,9 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
   | Ast.Var {name; _} ->
       let reference =
         Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in
-      let t = check_type t reference in
-      t
+      let res, typ = check_type t reference in
+      Stdio.print_s [%sexp "var-check-type", {name: string; reference: Ast.t; typ: TypeSpec.t}] ;
+      (res, typ)
   | Ast.Builtin {builtin; _} -> (t, TypeSpec.Const builtin)
   | Ast.Param {idx; name; typ; _} -> (
     match typ with
@@ -293,4 +296,12 @@ and instantiate1 t callee callee_type args_types : Resolver.t * Instance.t =
   | Const TYPEOF ->
       let result_type = TypeSpec.get_type (List.hd_exn args_types) in
       (t, Instance.{callee; callee_type; args_types; result_type})
-  | _ -> failwith @@ Sexp.to_string [%sexp "unknown instantiation", {callee_type: TypeSpec.t}]
+  | Overload items ->
+      let result_type = TypeSpec.Error in
+      (t, Instance.{callee; callee_type; args_types; result_type})
+  | _ ->
+      failwith
+      @@ Sexp.to_string
+           [%sexp
+             "unknown instantiation"
+             , {callee: Ast.t; callee_type: TypeSpec.t; args_types: TypeSpec.t list}]

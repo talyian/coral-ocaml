@@ -5,9 +5,14 @@ open Coral_frontend
 let get_types source =
   let%bind.Result imports = Test_utils.parse_with_imports source in
     let names = Coral_passes.Name_resolution.construct imports in
+    (* Coral_passes.Name_resolution.show names; *)
     let names = Coral_passes.Name_resolution.get_data names in
-    let attributes, main = Coral_passes.Attribute_resolution.run imports.main in
-    let types = Coral_types.Resolver.construct names main in
+(* TODO: running attribute resolution after name resolution has the problem that
+any new nodes we generate have to be remapped in the name reference table.
+   It would really like to go after name resolution, however, since both the
+   decorator name and its arguments can depend on name resolution *)
+  (* let attributes, main = Coral_passes.Attribute_resolution.run imports.main in *)
+    let types = Coral_types.Resolver.construct names imports.main in
   Ok types
 
 let show_types source = match get_types source
@@ -56,27 +61,30 @@ func main ():
   let x = "3"
   let y = 3
   let z = 3.0
-  let c = (typeof x, typeof y, typeof z)
-  let d = typeof(x, y, z)
+  let typeof_triple = typeof(x, y, z)
+  let triple_oftype = (typeof x, typeof y, typeof z)
 |} in
-  show_line types "Let-c";
+  ignore [%expect.output];
+  show_line types "Let-typeof_triple";
   [%expect{| {(STR INT64 FLOAT64)} |}];
-  show_line types "Let-d";
+  show_line types "Let-triple_oftype";
   [%expect{| TUPLE[3, 3, 3.] |}]
 
 let%expect_test "types - imports" =
   show_types {|
-let Cstr = Ptr[Uint8]
-
-extern("c", "malloc", Func[Cstr][Uint64])
-extern("c", "free"  , Func[][Cstr])
-extern("c", "printf", Func[][Cstr, ...])
+import raw_clib
 
 func main():
-  printf("Hello, %g", 3.1416)
+  let format = raw_clib.malloc 10
+  raw_clib.memcpy(format, "Hello", 5)
+  raw_clib.memcpy(format + 5, ", %g", 5)
+  raw_clib.printf(format, 3.1416)
 |}
-    ;[%expect {| "name not found: Ptr" |}]
-    (* open Base
+
+;[%expect {| |}]
+(* TODO: this has an issue because I guess Ast.fold_map is creating new refs
+   when we need to keep the old refs *)
+(* open Base
  * open Coral_core
  * open Coral_frontend
  *

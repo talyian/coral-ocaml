@@ -123,7 +123,7 @@ expr_op_unit
 (* so we can do this in the grammar, by making a expr_atom_but_not_tuple pattern
    but doing it inside the reduction seems okay too *)
     | callee=expr_op_unit arg=expr_atom {
-        match !arg with
+        match Coral_core.Ast.Sexp_ref.( ! ) arg with
         | Node.Tuple {items=args;_} -> Make.callNode callee args
         | Node.List {items=args;_} -> Make.index callee args
         | _ -> Make.callNode callee [arg] }

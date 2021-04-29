@@ -13,6 +13,28 @@ open Base
 type importType = Module of string option | All | ImpMember of string * string option
 [@@deriving compare, sexp, show]
 
+(* make sexp skinnier by hiding the refs *)
+module Sexp_ref : sig
+  type 'a t [@@deriving compare, sexp, show]
+
+  val ( ! ) : 'a t -> 'a
+  val ref : 'a -> 'a t
+end = struct
+  type 'a t = 'a ref [@@deriving compare]
+
+  let pp pp_of_a formatter {contents} = pp_of_a formatter contents
+  let t_of_sexp f s = ref @@ f s
+  let sexp_of_t f {contents} = f contents
+
+  let show (pp_contents : Formatter.t -> 'a -> unit) {contents} =
+    let buffer = Buffer.create 8 in
+    let formatter = Caml.Format.formatter_of_buffer buffer in
+    pp_contents formatter contents ; Buffer.contents buffer
+
+  let ( ! ) {contents} = contents
+  let ref = ref
+end
+
 module Node = struct
   (* make sexp skinnier by just showing the name *)
   type var = {name: string} [@@deriving compare]
@@ -20,13 +42,6 @@ module Node = struct
   let pp_var formatter {name} = Caml.Format.fprintf formatter "%s" name
   let var_of_sexp = function Sexp.Atom name -> {name} | List _ -> failwith "unexpected list"
   let sexp_of_var {name} = Sexp.Atom name
-
-  (* make sexp skinnier by hiding the refs *)
-  type 'a sexp_ref = 'a ref [@@deriving compare]
-
-  let pp_sexp_ref pp_of_a formatter {contents} = pp_of_a formatter contents
-  let sexp_ref_of_sexp f s = ref @@ f s
-  let sexp_of_sexp_ref f {contents} = f contents
 
   module Node0 = struct
     type t0 =
@@ -64,12 +79,12 @@ module Node = struct
       | TypeAlias of {name: string; typ: t}
     [@@deriving compare, sexp, show {with_path= false}]
 
-    and t = t0 sexp_ref
+    and t = t0 Sexp_ref.t
 
     let rec show_short node =
       let open Printf in
       let rec name_of node =
-        match !node with
+        match Sexp_ref.( ! ) node with
         | Extern {name; _} | Func {name; _} | Module {name; _} | Var {name; _} | Let {name; _} ->
             name
         | Import {path; _} -> String.concat ~sep:"." path
@@ -84,7 +99,7 @@ module Node = struct
         | Return {value; _} -> name_of value
         | _ -> "EXPR"
       and type_name_of node =
-        match !node with
+        match Sexp_ref.( ! ) node with
         | Extern _ -> "Extern"
         | Import _ -> "Import"
         | Module _ -> "Module"
@@ -97,7 +112,7 @@ module Node = struct
         | Binop _ -> "Binop"
         | Param _ -> "Param"
         | _ -> "expr" in
-      match !node with
+      match Sexp_ref.( ! ) node with
       | Module {name; _} -> ( match name with "" -> "<module>" | n -> n )
       | Func {name; _} -> name
       | Block _ -> "Block"
@@ -115,58 +130,101 @@ module Node = struct
 
   type node = t [@@deriving compare, sexp_of, show {with_path= false}]
 
-  let fold_map ~(init : 'state) ~(f : 'state -> t -> 'state * t) (expr : t) =
-    let bind1 f v = match Option.map ~f v with
-      | Some(init, v) -> init, Some v
-      | None -> init, None in
-    match !expr with
-    | Module m ->
-        let init, lines = List.fold_map ~init ~f m.lines in
-        (init, ref @@ Module {m with lines})
-    | Call c ->
-        let init, callee = f init c.callee in
-        let init, args = List.fold_map ~init ~f c.args in
-        (init, ref @@ Call {callee; args})
-    | Block {items} ->
-        let init, items = List.fold_map ~init ~f items in
-        (init, ref @@ Block {items})
-    | Tuple {items} ->
-        let init, items = List.fold_map ~init ~f items in
-        (init, ref @@ Tuple {items})
-    | List {items} ->
-        let init, items = List.fold_map ~init ~f items in
-        (init, ref @@ List {items})
-    | Index c ->
-        let init, callee = f init c.callee in
-        let init, args = List.fold_map ~init ~f c.args in
-        (init, ref @@ Call {callee; args})
-    | Let x ->
-        let init, value = f init x.value in
-        let init, typ =
-          match Option.map ~f:(f init) x.typ with
-          | Some (init, typ) -> (init, Some typ)
-          | None -> (init, None) in
-        (init, ref @@ Let {name= x.name; typ; value})
-    | StringLiteral _ | CharLiteral _ | IntLiteral _ | FloatLiteral _ | Var _ -> (init, expr)
-    | Extern {name; binding; typ} ->
-        let init, typ = f init typ in
-        (init, ref @@ Extern {name; binding; typ})
-    | Func {name; params; ret_type; body} ->
-       let init, ret_type = bind1 (f init) ret_type in
-       let init, params = List.fold_map ~init  ~f params in
-       let init, body = f init body in
-       init, ref @@ Func {name; params; ret_type; body}
-    | Import _ | Param _ | Comment _ | Binop _ | If _ | Set _ | Member _ | Return _
-     |Builtin _ | Overload _ | Empty | Type _ | Decorated _ | TypeDecl _ | TypeAlias _ ->
-        failwith @@ Sexp.to_string [%sexp "unimplemented", (expr : node)]
+  (* let fold_map ~(init : 'state) ~(f : 'state -> t -> 'state * t) (expr : t) =
+   *   let bind1 f v =
+   *     match Option.map ~f v with Some (init, v) -> (init, Some v) | None -> (init, None) in
+   *   match !expr with
+   *   | Module m ->
+   *       let init, lines = List.fold_map ~init ~f m.lines in
+   *       (init, ref @@ Module {m with lines})
+   *   | Call c ->
+   *       let init, callee = f init c.callee in
+   *       let init, args = List.fold_map ~init ~f c.args in
+   *       (init, ref @@ Call {callee; args})
+   *   | Block {items} ->
+   *       let init, items = List.fold_map ~init ~f items in
+   *       (init, ref @@ Block {items})
+   *   | Tuple {items} ->
+   *       let init, items = List.fold_map ~init ~f items in
+   *       (init, ref @@ Tuple {items})
+   *   | List {items} ->
+   *       let init, items = List.fold_map ~init ~f items in
+   *       (init, ref @@ List {items})
+   *   | Index c ->
+   *       let init, callee = f init c.callee in
+   *       let init, args = List.fold_map ~init ~f c.args in
+   *       (init, ref @@ Call {callee; args})
+   *   | Let x ->
+   *       let init, value = f init x.value in
+   *       let init, typ =
+   *         match Option.map ~f:(f init) x.typ with
+   *         | Some (init, typ) -> (init, Some typ)
+   *         | None -> (init, None) in
+   *       (init, ref @@ Let {name= x.name; typ; value})
+   *   | StringLiteral _ | CharLiteral _ | IntLiteral _ | FloatLiteral _ | Var _ -> (init, expr)
+   *   | Extern {name; binding; typ} ->
+   *       let init, typ = f init typ in
+   *       (init, ref @@ Extern {name; binding; typ})
+   *   | Func {name; params; ret_type; body} ->
+   *       let init, ret_type = bind1 (f init) ret_type in
+   *       let init, params = List.fold_map ~init ~f params in
+   *       let init, body = f init body in
+   *       (init, ref @@ Func {name; params; ret_type; body})
+   *   | Import _ | Param _ | Comment _ | Binop _ | If _ | Set _ | Member _ | Return _ | Builtin _
+   *    |Overload _ | Empty | Type _ | Decorated _ | TypeDecl _ | TypeAlias _ ->
+   *       failwith @@ Sexp.to_string [%sexp "unimplemented", (expr : node)] *)
 
-  let fold ~init ~f expr = fst @@ fold_map ~init ~f:(fun state t -> (f state t, t)) expr
+  (* let fold ~init ~f expr = fst @@ fold_map ~init ~f:(fun state t -> (f state t, t)) expr *)
+  let fold ~init ~f (expr : node) =
+    match Sexp_ref.( ! ) expr with
+    | Module x -> List.fold ~init ~f x.lines
+    | Call x -> List.fold ~init:(f init x.callee) ~f x.args
+    | Import _ -> init
+    | Extern _ -> init
+    | Func x ->
+        let init = List.fold ~init ~f x.params in
+        let init = Option.fold ~init ~f x.ret_type in
+        let init = f init x.body in
+        init
+    | Param x -> Option.fold ~f ~init x.typ
+    | Comment _ -> init
+    | Binop x -> List.fold ~init ~f x.args
+    | If x -> f (f (f init x.cond) x.ifbody) x.elsebody
+    | IntLiteral _ -> init
+    | FloatLiteral _ -> init
+    | CharLiteral _ -> init
+    | StringLiteral _ -> init
+    | Var _ -> init
+    | Let x ->
+        let init = Option.fold ~init ~f x.typ in
+        let init = f init x.value in
+        init
+    | Set x ->
+        let init = f init x.name in
+        f init x.value
+    | Block x -> List.fold ~init ~f x.items
+    | Tuple x -> List.fold ~init ~f x.items
+    | List x -> List.fold ~init ~f x.items
+    | Index x ->
+        let init = f init x.callee in
+        let init = List.fold ~init ~f x.args in
+        init
+    | Member x -> f init x.base
+    | Return x -> f init x.value
+    | Builtin _ -> init
+    | Overload x -> List.fold ~f ~init x.items
+    | Empty -> init
+    | Type x -> f init x.typ
+    | Decorated x -> f (f init x.attribute) x.target
+    | TypeDecl x -> List.fold ~init ~f x.fields
+    | TypeAlias x -> f init x.typ
 end
 
 (* A set of constructors for the Ast nodes. *)
 module Make = struct
   open Node
 
+  let ref = Sexp_ref.ref
   let moduleNode name lines : node = ref @@ Module {name; lines}
   let extern binding name typ : node = ref @@ Extern {binding; name; typ}
   let import path names : node = ref @@ Import {path; names}

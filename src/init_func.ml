@@ -7,7 +7,7 @@
     For now, we can do it the naive way and only support simple literals, and initialize everything
     else at the begining of .init. *)
 
-open Coral_core
+open! Coral_core
 
 (* type expr_class = Global of Ast_node.Adt.node | Init of Ast_node.Adt.node
  *

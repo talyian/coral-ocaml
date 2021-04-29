@@ -21,12 +21,17 @@ module type S = sig
   val read_attribute : t -> Ast.Node.t -> Attribute.Name.t -> Attribute.t option
 end
 
-let rec convert_attributes s = function
-  | {contents= Ast.Node.Decorated {attribute; target; _}} ->
-      Stdio.print_s [%sexp "convert_attributes: found attribute"] ;
-      (s, target)
-  | node -> Coral_core.Ast.fold_map ~init:s ~f:convert_attributes node
+(* let rec convert_attributes s = function
+ *   | {contents= Ast.Node.Decorated {target; _}} ->
+ *       Stdio.print_s [%sexp "convert_attributes: found attribute"] ;
+ *       (s, target)
+ *   | node -> Coral_core.Ast.fold_map ~init:s ~f:convert_attributes node *)
 
-let run ?init e =
-  let init = match init with Some init -> init | None -> () in
-  convert_attributes init e
+(* let rec convert_attributes init expr =
+ *   match !expr with
+ *   | Ast.Decorated {target; _} -> (init, target)
+ *   | node -> (Ast.fold ~init ~f:(convert_attributes node, node) *)
+
+(* let run ?init e =
+ *   let init = match init with Some init -> init | None -> () in
+ *   convert_attributes init e *)

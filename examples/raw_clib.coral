@@ -10,6 +10,12 @@
 #      e.g. type Id = String; id.toString() :: Id seems weird.
 let Cstr = Ptr[Uint8]
 
-extern("c", "malloc", Func[Cstr][Uint64])
-extern("c", "free"  , Func[][Cstr])
-extern("c", "printf", Func[][Cstr, ...])
+extern("c", "malloc", Func[Uint64][Cstr])
+extern("c", "free"  , Func[Cstr][])
+
+extern("c", "memset", Func[addr:Cstr, char:Int32, n:Int64][Cstr])
+extern("c", "memcpy", Func[dest:Cstr, src:Cstr, n:Int64][Cstr])
+extern("c", "memmove", Func[dest:Cstr, src:Int32, n:Int64][Cstr])
+# TODO memcmp memmem memccpy
+
+extern("c", "printf", Func[Cstr, ...][])

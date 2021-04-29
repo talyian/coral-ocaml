@@ -1,8 +1,8 @@
 (* After Name and type resolution has run, we should have overload indices for any var that refers
    to an overload-set. So we should be able to replace the mapped value to the direct overload item
    in the set. *)
-open Base
-open Coral_core
+open! Base
+open! Coral_core
 
 (* let fix_name_resolution (names : Names.t) (types : Resolver.Resolver.t) =
  *   (\* Given a var and a reference, if that reference is an overload change it to the overload slot *\)

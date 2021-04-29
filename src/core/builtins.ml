@@ -63,6 +63,9 @@ type t =
   | ELLIPSIS
   (* intrinsics *)
   | TYPEOF
+  (* Pointers *)
+  | ADD_PTR_INT
+  | SUB_PTR_INT
   | DEREF
   | ADDROF
   (* custom *)

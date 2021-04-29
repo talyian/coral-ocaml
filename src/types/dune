@@ -1,5 +1,0 @@
-(library
- (name types)
- (preprocess (pps ppx_compare ppx_deriving.show
-                  ppx_sexp_conv ppx_sexp_value
-                  ppx_let ppx_inline_test)))
