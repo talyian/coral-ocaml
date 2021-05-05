@@ -125,12 +125,16 @@ end
 let dump = Resolver.dump
 
 let rec construct ns (node : Ast.t) : Resolver.t =
-  let t =
+  let resolver =
     {Resolver.ns; types= Map.empty (module Ast); instantiations= Map.empty (module InstanceArgs)}
   in
-  fst @@ check_type t
-  @@ Option.value_exn ~message:"Main func not found" (Names.deref_member t.ns node "main")
+  match Names.deref_member resolver.ns node "main" with
+  | Some main -> fst @@ check_type resolver main
+  | None -> fst @@ check_type resolver node
 
+(* fst @@ check_type resolver
+ * @@ Option.value_exn ~message:"Main func not found"
+ *      (Names.deref_member resolver.ns node "main") *)
 and check_type t node : Resolver.t * TypeSpec.t =
   (* memoized *)
   match Resolver.resolve t node with
@@ -253,6 +257,10 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * TypeSpec.t =
   | Ast.Tuple {items} ->
       let t, item_types = List.fold_map ~init:t ~f:check_type items in
       (t, TypeSpec.Record (List.map ~f:(fun x -> (None, x)) item_types))
+  | Ast.Import _ -> (t, TypeSpec.Any)
+  | Ast.Module {lines; _} ->
+      let t, item_types = List.fold_map ~init:t ~f:check_type lines in
+      (t, TypeSpec.Any)
   | _ -> failwith @@ "unhandled node type in check_type: " ^ Ast.show node
 
 and instantiate t callee callee_type args_types : Resolver.t * TypeSpec.t =

@@ -15,6 +15,20 @@ any new nodes we generate have to be remapped in the name reference table.
     let types = Coral_types.Resolver.construct names imports.main in
   Ok types
 
+let run_test_file file =
+  match
+  let%map.Result imports = Test_utils.parse_file_with_imports file in
+  let names = Coral_passes.Name_resolution.construct imports in
+  let names = Coral_passes.Name_resolution.get_data names in
+  let types = Coral_types.Resolver.construct names imports.main in
+  types
+  with | Ok types ->
+    Coral_types.Resolver.dump types;
+  | Error e ->
+    Stdio.print_endline @@ Frontend.show_parseError e;
+  | exception e ->
+    Stdio.print_endline @@ Exn.to_string e
+
 let show_types source = match get_types source
 with
   | Ok types ->
@@ -108,6 +122,14 @@ func main():
     (typ_type FUNC)))
   (Failure
     "(\"unknown instantiation\"((callee(Member(base(Var raw_clib))(member malloc)))(callee_type(instance_of FUNC))(args_types(10))))") |}]
+
+
+let%expect_test "type-resolution -- regex-redux" =
+    run_test_file "examples/benchmarks_game/regex-redux.coral";
+    [%expect {|
+    "Member reference not found: Member {base = (Var stdin); member = \"fd\"}" |}]
+
+
 (* TODO: this has an issue because I guess Ast.fold_map is creating new refs
    when we need to keep the old refs *)
 (* open Base

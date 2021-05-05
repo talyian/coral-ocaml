@@ -44,9 +44,10 @@ import io (stdin, printf)
 
 # sub_patterns     ->
 
+let fd = stdin.fd
 let seq = stdin.read()
 let len1 = seq.length()
-let seq = (regex ">.*\n|\n").replace(seq, "")
+let seq = regex(">.*\n|\n").replace(seq, "")
 let len2 = seq.length()
 
 let search_patterns = [
