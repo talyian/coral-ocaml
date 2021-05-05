@@ -12,7 +12,10 @@ module Scope = struct
     | Some value -> Some value
     | None -> List.find_map (parents t) ~f:(find ~name)
 
-  let add name node (Scope t) = Scope {t with names= Map.add_exn t.names ~key:name ~data:node}
+  let add name node (Scope t) =
+    (* This overwrites the previous binding *)
+    Scope {t with names= Map.set t.names ~key:name ~data:node}
+
   let create () = Scope {parents= []; names= Map.empty (module String)}
 
   let nest t =
@@ -83,8 +86,12 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
                 Scope.add name imported_member scope
             | ImpMember (member, None) ->
                 let imported_member =
-                  Map.find_exn imported_names.members {Names.Member.expr= imported_module; member}
-                in
+                  match
+                    Map.find_exn imported_names.members {Names.Member.expr= imported_module; member}
+                  with
+                  | exception _ ->
+                      failwith @@ "Failed to find import member " ^ member ^ " of " ^ path_name
+                  | o -> o in
                 Scope.add member imported_member scope)
           names in
       {data with current_scope= scope}
@@ -127,9 +134,13 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
         match data.current_scope with
         | Scope {names; _} ->
             Map.fold names ~init:data ~f:(fun ~key ~data dd ->
-                let members =
-                  Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
-                {dd with members}) in
+                try
+                  let members =
+                    Map.add_exn dd.members ~key:{Names.Member.expr= node; member= key} ~data in
+                  {dd with members}
+                with _ ->
+                  failwith @@ Sexp.to_string [%sexp "duplicate declaration ", (key : string)])
+      in
       data
   | Ast.Type {typ} ->
       Ast.show typ |> Stdio.print_endline ;
@@ -138,13 +149,16 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
   | Ast.TypeAlias {name; _} -> {data with current_scope= Scope.add name node data.current_scope}
   | _ -> Ast.fold ~init:data ~f:run node
 
-let show n =
+let show ?only_names n =
+  let only_names = match only_names with Some () -> true | _ -> false in
   Stdio.printf "Names\n" ;
   Map.iteri n.NameTraversal.refs ~f:(fun ~key ~data ->
       Stdio.printf "    [%s] -> %s\n" (Ast.show_short key) (Ast.show_short data)) ;
-  Stdio.printf "Names.members\n" ;
-  Map.iteri n.NameTraversal.members ~f:(fun ~key ~data ->
-      Stdio.printf "    [%s.%s] -> %s\n" (Ast.show_short key.expr) key.member (Ast.show_short data))
+  if not only_names then (
+    Stdio.printf "Names.members\n" ;
+    Map.iteri n.NameTraversal.members ~f:(fun ~key ~data ->
+        Stdio.printf "    [%s.%s] -> %s\n" (Ast.show_short key.expr) key.member
+          (Ast.show_short data)) )
 
 let default_global_scope = Builtin_defs.initialize_names ~init:(Scope.create ()) ~f:Scope.add
 

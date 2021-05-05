@@ -2,8 +2,11 @@
 # modified from PHP version contributed by Oleksii Prudkyi and
 # crediting Mike Pall, Wim Couwenberg, Craig Russell
 
+import bigint (bigint)
+import console
+
 let k = 1
-let n = int (sys.args[1])
+let n = Int64 (console.args[1])
 
 let u = bigint 0
 let v = bigint 0

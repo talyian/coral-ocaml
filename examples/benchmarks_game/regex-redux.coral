@@ -9,11 +9,44 @@
 # 2. detect parallelism: calculate that the first for loop branches and
 # the sub_patterns loop are independent automatically. This is nontrivial
 # and requires using IO state in the type system.
-import regex
+import regex (regex)
+import io (stdin, printf)
+
+# ----
+# type Fdreader = { fd: Int32 }
+
+# stdin         -> :FdReader
+# FdReader.read -> :Method[:FdReader][:String]
+# seq           -> call(FdReader.read, stdin)
+#               -> :String
+# String.length -> :Method[:String][:Int64]
+# len1          -> methodcall(String.length, seq)
+#               -> :Int64
+# regex         -> :Func[:String][:Regex]
+# Regex.replace -> :Method[:Regex, target:String, replacement:String][:String]
+# seq           -> methodcall(Regex.replace, (temp), :String)
+#               -> :String
+# len2          -> methodcall(String.length, seq)
+#               -> :Int64
+
+# search_patterns  -> List[String]
+# p                -> String
+# print            -> :Func[...][]
+# regex p          -> :Regex
+# (temp)           -> :Regex
+# Regex.matches    -> :Method[:Regex, target:String][:MatchList]
+# (temp)           -> methodcall(:Regex, Regex.matches, seq)
+#                  -> :MatchList
+# MatchList.length -> :Method[:MatchList][:Int32]
+# (temp)           -> methodcall(MatchList.length)
+#                  -> :Int32
+# (temp)       ->  -> call(print, p, (temp))
+
+# sub_patterns     ->
 
 let seq = stdin.read()
 let len1 = seq.length()
-let seq = seq.replace(regex ">.*\n|\n", "")
+let seq = (regex ">.*\n|\n").replace(seq, "")
 let len2 = seq.length()
 
 let search_patterns = [
@@ -27,7 +60,7 @@ let search_patterns = [
     "agggta[cgt]a|t[acg]taccct",
     "agggtaa[cgt]|[acg]ttaccct"]
 for (p) in search_patterns:
-   print(p, seq.matches(regex p).length())
+   print(p, (regex p).matches(seq).length())
 
 let sub_patterns = [
     ["tHa[Nt]",            "<4>"],

@@ -1,0 +1,9 @@
+# this is a WIP for tests
+type FdReader = struct { fd:Int32 }
+type FdWriter = struct { fd:Int32 }
+
+let stdin = FdReader 0
+let stdout = FdWriter 1
+let stderr = FdWriter 2
+
+extern("c", "printf", Func[...][])

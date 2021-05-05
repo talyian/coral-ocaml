@@ -4,6 +4,7 @@ type token =
   | SET
   | RPAREN
   | RETURN
+  | YIELD
   | RBRACKET
   | RBRACE
   | OTHER of char

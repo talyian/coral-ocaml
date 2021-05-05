@@ -40,3 +40,7 @@ let initialize_names ~(init : 't) ~(f : string -> Coral_core.Ast.node -> 't -> '
   |> def "typeof" @@ builtin @@ TYPEOF
   |> def "addrof" (builtin ADDROF)
   |> def "deref" (builtin DEREF)
+  |> def "null" (builtin @@ Custom "NULL")
+  |> def "i32" (builtin @@ Custom "i32")
+  |> def "??" (builtin @@ Custom "??")
+  |> custom_def "max" |> custom_def "yield"

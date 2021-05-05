@@ -67,6 +67,7 @@ module Node = struct
       | Index of {callee: t; args: t list}
       | Member of {base: t; member: string}
       | Return of {value: t}
+      | Yield of {value: t}
       | Builtin of {builtin: Builtins.t}
       | Overload of {name: string; items: t list}
       | Empty
@@ -97,6 +98,9 @@ module Node = struct
         | Block _ -> ""
         | Param {name; _} -> name
         | Return {value; _} -> name_of value
+        | TypeDecl {name; _} -> name
+        | Binop {callee; _} -> name_of callee
+        | Overload _ -> "Overload"
         | _ -> "EXPR"
       and type_name_of node =
         match Sexp_ref.( ! ) node with
@@ -111,7 +115,8 @@ module Node = struct
         | Call _ -> "Call"
         | Binop _ -> "Binop"
         | Param _ -> "Param"
-        | _ -> "expr" in
+        | TypeDecl _ -> "TypeDecl"
+        | x -> ( match sexp_of_t0 x with List (Atom s :: _) -> s | _ -> "expr" ) in
       match Sexp_ref.( ! ) node with
       | Module {name; _} -> ( match name with "" -> "<module>" | n -> n )
       | Func {name; _} -> name
@@ -211,6 +216,7 @@ module Node = struct
         init
     | Member x -> f init x.base
     | Return x -> f init x.value
+    | Yield x -> f init x.value
     | Builtin _ -> init
     | Overload x -> List.fold ~f ~init x.items
     | Empty -> init
@@ -230,6 +236,7 @@ module Make = struct
   let import path names : node = ref @@ Import {path; names}
   let var name : node = ref @@ Var {name}
   let returnNode value : node = ref @@ Return {value}
+  let yieldNode value : node = ref @@ Yield {value}
   let tuple items : node = ref @@ Tuple {items}
   let list items : node = ref @@ List {items}
   let block items : node = ref @@ Block {items}

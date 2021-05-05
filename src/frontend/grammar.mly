@@ -9,7 +9,7 @@ module Make = Coral_core.Ast.Make
 %token <string> IDENTIFIER STRING ATTRIBUTE_NAME
 %token <char> CHAR
 %token <int> NEWLINE
-%token FUNC IF ELSE ELIF FOR IN RETURN LET SET IMPORT EXTERN
+%token FUNC IF ELSE ELIF FOR IN RETURN YIELD LET SET IMPORT EXTERN
 %token LPAREN RPAREN COLON LBRACE RBRACE LBRACKET RBRACKET
 %token INDENT DEDENT TYPE
 %token COMMA ELLIPSIS SEMICOLON
@@ -50,7 +50,8 @@ line
 | SET expr_op_unit EQ e=expr { Make.setNode $2 e }
 | SET expr_op_unit OPERATOR expr { Make.empty }
 | RETURN arg=expr { Make.returnNode arg }
-| RETURN { Make.returnNode @@ Make.tuple [] }
+  | RETURN { Make.returnNode @@ Make.tuple [] }
+| YIELD arg=expr { Make.yieldNode arg }
 | e=expr { e }
 | e=forexpr {e}
 | ATTRIBUTE_NAME line { Make.attribute $1 [] $2 }

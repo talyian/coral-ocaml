@@ -1,0 +1,5 @@
+# sample regex module for tests. This is a big WIP.
+
+type Regex = struct { handle:Int64 }
+
+func regex (pattern:Str): Regex 0

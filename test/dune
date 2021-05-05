@@ -5,7 +5,7 @@
  (modules test_utils type_resolution name_resolution basics)
  (libraries unix coral_frontend coral_core coral_passes coral_types)
  (preprocess
-  (pps ppx_let ppx_expect ppx_inline_test)))
+  (pps ppx_let ppx_sexp_value ppx_expect ppx_inline_test)))
 
 (env
  (dev

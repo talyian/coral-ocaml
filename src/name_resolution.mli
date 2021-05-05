@@ -4,7 +4,7 @@
 type t
 
 (* for development; dump the state of the resolved maps *)
-val show : t -> unit
+val show : ?only_names:unit -> t -> unit
 
 (* Construct Name_resolution.t by traversing an module. Because name resolution relies on import
    statements, this necessarily depends on an Imports.t *)

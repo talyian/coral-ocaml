@@ -64,6 +64,7 @@ rule coral_token ctx = parse
   | "in"  { [Token.IN] }
   | "let" { [Token.LET] }
   | "return" { [Token.RETURN] }
+  | "yield" { [Token.YIELD] }
   | "set" { [Token.SET] }
   | "type" { [Token.TYPE] }
 
@@ -86,7 +87,7 @@ rule coral_token ctx = parse
   | ';' { [Token.SEMICOLON] }
   | '#' { comment ctx lexbuf }
   | '\n' [' ']* as tok { handle_newline (String.length tok - 1) ctx lexbuf }
-  | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@']+ as tok { [parse_operator(tok)] }
+  | ['-' '+' '*' '/' '=' '>' '<' '$' '!' '|' '^' '%' '@' '?']+ as tok { [parse_operator(tok)] }
   | ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok { [Token.IDENTIFIER(tok)] }
   | '@' (['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']* as tok) { [Token.ATTRIBUTE_NAME(tok)] }
   | "..." { [Token.ELLIPSIS] }

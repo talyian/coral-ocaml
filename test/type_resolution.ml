@@ -41,19 +41,24 @@ func main ():
   printf("Hello, %s\n", "World")
 |};
     [%expect {|
-      Call-Func        FUNC[ELLIPSIS][]
-      Call-Func        FUNC[ELLIPSIS]
-      Call-printf      ::VOID
-      Extern-printf    ::FUNC[ELLIPSIS][]
-      main             FUNC[][]
-      "Hello, %s\n"    Hello, %s
-
-      "World"          World
-      Var-...          ELLIPSIS
-      Var-Func         FUNC
-      Var-printf       ::FUNC[ELLIPSIS][]
-      Builtin-FUNC     FUNC
-      Builtin-ELLIPSIS ELLIPSIS |}]
+      (var-check-type
+       ((name Func) (reference (Builtin (builtin FUNC))) (typ FUNC)))
+      (var-check-type
+       ((name ...) (reference (Builtin (builtin ELLIPSIS))) (typ ELLIPSIS)))
+      (extern
+       ((name printf)
+        (typ
+         (Call (callee (Call (callee (Var Func)) (args ((Var ...))))) (args ())))
+        (typ_type FUNC)))
+      (var-check-type
+       ((name printf)
+        (reference
+         (Extern (binding c) (name printf)
+          (typ
+           (Call (callee (Call (callee (Var Func)) (args ((Var ...))))) (args ())))))
+        (typ (instance_of FUNC))))
+      (Failure
+        "(\"unknown instantiation\"((callee(Var printf))(callee_type(instance_of FUNC))(args_types(\"Hello, %s\\n\"World))))") |}]
 
 let%expect_test "types - literals" =
   let types = get_types {|
@@ -66,9 +71,9 @@ func main ():
 |} in
   ignore [%expect.output];
   show_line types "Let-typeof_triple";
-  [%expect{| {(STR INT64 FLOAT64)} |}];
+  [%expect{| TUPLE['3', 3i, 3.f] |}];
   show_line types "Let-triple_oftype";
-  [%expect{| TUPLE[3, 3, 3.] |}]
+  [%expect{| {(STR INT64 FLOAT64)} |}]
 
 let%expect_test "types - imports" =
   show_types {|
@@ -81,7 +86,28 @@ func main():
   raw_clib.printf(format, 3.1416)
 |}
 
-;[%expect {| |}]
+;[%expect {|
+  (var-check-type
+   ((name Func) (reference (Builtin (builtin FUNC))) (typ FUNC)))
+  (var-check-type
+   ((name Uint64) (reference (Builtin (builtin UINT64))) (typ UINT64)))
+  (var-check-type ((name Ptr) (reference (Builtin (builtin PTR))) (typ PTR)))
+  (var-check-type
+   ((name Uint8) (reference (Builtin (builtin UINT8))) (typ UINT8)))
+  (var-check-type
+   ((name Cstr)
+    (reference
+     (Let (name Cstr) (typ ())
+      (value (Index (callee (Var Ptr)) (args ((Var Uint8)))))))
+    (typ PTR)))
+  (extern
+   ((name malloc)
+    (typ
+     (Call (callee (Call (callee (Var Func)) (args ((Var Uint64)))))
+      (args ((Var Cstr)))))
+    (typ_type FUNC)))
+  (Failure
+    "(\"unknown instantiation\"((callee(Member(base(Var raw_clib))(member malloc)))(callee_type(instance_of FUNC))(args_types(10))))") |}]
 (* TODO: this has an issue because I guess Ast.fold_map is creating new refs
    when we need to keep the old refs *)
 (* open Base
