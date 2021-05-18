@@ -1,0 +1,9 @@
+
+# Examples:
+
+extern("c", "malloc", Func[Int64][Ptr[Int8]])
+
+# Ptr is a Type constructor
+Int8      =  :Type
+Ptr       =  :TFunc[:Type]
+Ptr[Int8] =  Appl(:Func[:Type], :Type) = :Type

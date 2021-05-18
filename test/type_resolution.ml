@@ -2,6 +2,7 @@ open Base
 open Coral_core
 open Coral_frontend
 
+module Utils = struct
 let get_types source =
   let%bind.Result imports = Test_utils.parse_with_imports source in
     let names = Coral_passes.Name_resolution.construct imports in
@@ -43,9 +44,12 @@ let show_line types line =
   match types with
   | Ok (types:Coral_types.Resolver.Resolver.t) ->
     Map.filter_keys ~f:(fun k -> String.(Ast.show_short k = line))  types.types
-    |> Map.min_elt_exn |> snd |> Coral_types.Resolver.TypeSpec.show
+    |> Map.min_elt_exn |> snd |> Coral_types.Typespec.show
     |> Stdio.print_endline
   | _ -> ()
+
+end
+open Utils
 
 let%expect_test "types - hello world" =
   show_types {|
@@ -54,25 +58,20 @@ extern("c", "printf", Func[...][])
 func main ():
   printf("Hello, %s\n", "World")
 |};
-    [%expect {|
-      (var-check-type
-       ((name Func) (reference (Builtin (builtin FUNC))) (typ FUNC)))
-      (var-check-type
-       ((name ...) (reference (Builtin (builtin ELLIPSIS))) (typ ELLIPSIS)))
+  [%expect {|
       (extern
        ((name printf)
-        (typ
-         (Call (callee (Call (callee (Var Func)) (args ((Var ...))))) (args ())))
-        (typ_type FUNC)))
-      (var-check-type
-       ((name printf)
-        (reference
-         (Extern (binding c) (name printf)
-          (typ
-           (Call (callee (Call (callee (Var Func)) (args ((Var ...))))) (args ())))))
-        (typ (instance_of FUNC))))
-      (Failure
-        "(\"unknown instantiation\"((callee(Var printf))(callee_type(instance_of FUNC))(args_types(\"Hello, %s\\n\"World))))") |}]
+        (typ 
+         (Index (callee (Index (callee (Var Func)) (args ((Var ...))))) (args ())))
+        (typ_type (Applied (Applied FUNC (instance_of ELLIPSIS))))))
+      Call-printf   :VOID
+      Extern-printf :FUNC[:ELLIPSIS][]
+      main          FUNC[][]
+      "Hello, %s\n" 'Hello, %s\n'
+      "World"       'World'
+      Var-...       ELLIPSIS
+      Var-Func      FUNC
+      Var-printf    :FUNC[:ELLIPSIS][] |}]
 
 let%expect_test "types - literals" =
   let types = get_types {|
@@ -80,16 +79,57 @@ func main ():
   let x = "3"
   let y = 3
   let z = 3.0
+  let triple = (x, y, z)
   let typeof_triple = typeof(x, y, z)
   let triple_oftype = (typeof x, typeof y, typeof z)
 |} in
   ignore [%expect.output];
+  show_line types "Let-triple";
+  [%expect{| {(3 3 3)} |}];
   show_line types "Let-typeof_triple";
   [%expect{| TUPLE['3', 3i, 3.f] |}];
   show_line types "Let-triple_oftype";
   [%expect{| {(STR INT64 FLOAT64)} |}]
 
 let%expect_test "types - imports" =
+  show_types {|
+let CStr = Ptr[Int8]
+extern("c", "getenv", Func[CStr][CStr])
+extern("c", "printf", Func[...][])
+let ptr: CStr = getenv("LANG")
+printf("%s", ptr)
+
+|}; [%expect{|
+  (extern
+   ((name getenv)
+    (typ
+     (Index (callee (Index (callee (Var Func)) (args ((Var CStr)))))
+      (args ((Var CStr)))))
+    (typ_type
+     (Applied (Applied FUNC (instance_of (Applied PTR (instance_of INT8))))
+      (instance_of (Applied PTR (instance_of INT8)))))))
+  (extern
+   ((name printf)
+    (typ
+     (Index (callee (Index (callee (Var Func)) (args ((Var ...))))) (args ())))
+    (typ_type (Applied (Applied FUNC (instance_of ELLIPSIS))))))
+  <module>      *
+  Call-getenv   :PTR[:INT8]
+  Call-printf   :VOID
+  Extern-getenv :FUNC[:PTR[:INT8]][:PTR[:INT8]]
+  Extern-printf :FUNC[:ELLIPSIS][]
+  "%s"          '%s'
+  "LANG"        'LANG'
+  Var-...       ELLIPSIS
+  Var-CStr      PTR[:INT8]
+  Var-Func      FUNC
+  Var-Int8      INT8
+  Var-Ptr       PTR
+  Var-getenv    :FUNC[:PTR[:INT8]][:PTR[:INT8]]
+  Var-printf    :FUNC[:ELLIPSIS][]
+  Var-ptr       :PTR[:INT8]
+  Let-CStr      PTR[:INT8]
+  Let-ptr       :PTR[:INT8] |} ];
   show_types {|
 import raw_clib
 
@@ -101,33 +141,78 @@ func main():
 |}
 
 ;[%expect {|
-  (var-check-type
-   ((name Func) (reference (Builtin (builtin FUNC))) (typ FUNC)))
-  (var-check-type
-   ((name Uint64) (reference (Builtin (builtin UINT64))) (typ UINT64)))
-  (var-check-type ((name Ptr) (reference (Builtin (builtin PTR))) (typ PTR)))
-  (var-check-type
-   ((name Uint8) (reference (Builtin (builtin UINT8))) (typ UINT8)))
-  (var-check-type
-   ((name Cstr)
-    (reference
-     (Let (name Cstr) (typ ())
-      (value (Index (callee (Var Ptr)) (args ((Var Uint8)))))))
-    (typ PTR)))
   (extern
    ((name malloc)
     (typ
-     (Call (callee (Call (callee (Var Func)) (args ((Var Uint64)))))
+     (Index (callee (Index (callee (Var Func)) (args ((Var Uint64)))))
       (args ((Var Cstr)))))
-    (typ_type FUNC)))
-  (Failure
-    "(\"unknown instantiation\"((callee(Member(base(Var raw_clib))(member malloc)))(callee_type(instance_of FUNC))(args_types(10))))") |}]
+    (typ_type
+     (Applied (Applied FUNC (instance_of UINT64))
+      (instance_of (Applied PTR (instance_of UINT8)))))))
+  (extern
+   ((name memcpy)
+    (typ
+     (Index
+      (callee
+       (Index (callee (Var Func)) (args ((Var Cstr) (Var Cstr) (Var Int64)))))
+      (args ((Var Cstr)))))
+    (typ_type
+     (Applied
+      (Applied FUNC (instance_of (Applied PTR (instance_of UINT8)))
+       (instance_of (Applied PTR (instance_of UINT8))) (instance_of INT64))
+      (instance_of (Applied PTR (instance_of UINT8)))))))
+  (extern
+   ((name printf)
+    (typ
+     (Index (callee (Index (callee (Var Func)) (args ((Var Cstr) (Var ...)))))
+      (args ())))
+    (typ_type
+     (Applied
+      (Applied FUNC (instance_of (Applied PTR (instance_of UINT8)))
+       (instance_of ELLIPSIS))))))
+  Call-+              *
+  Call-EXPR           :PTR[:UINT8]
+  Call-EXPR           :PTR[:UINT8]
+  Call-EXPR           :PTR[:UINT8]
+  Call-EXPR           :VOID
+  Extern-malloc       :FUNC[:UINT64][:PTR[:UINT8]]
+  Extern-memcpy       :FUNC[:PTR[:UINT8], :PTR[:UINT8], :INT64][:PTR[:UINT8]]
+  Extern-printf       :FUNC[:PTR[:UINT8], :ELLIPSIS][]
+  main                FUNC[][]
+  IntLiteral-10       10i
+  IntLiteral-5        5i
+  FloatLiteral-3.1416 3.1416f
+  ", %g"              ', %g'
+  "Hello"             'Hello'
+  Var-+               overload:(ADD_INT,ADD_FLOAT,ADD_STR,ADD_PTR_INT)
+  Var-...             ELLIPSIS
+  Var-Cstr            PTR[:UINT8]
+  Var-Func            FUNC
+  Var-Int64           INT64
+  Var-Ptr             PTR
+  Var-Uint64          UINT64
+  Var-Uint8           UINT8
+  Var-format          :PTR[:UINT8]
+  Let-Cstr            PTR[:UINT8]
+  Let-format          :PTR[:UINT8]
+  Block               :VOID
+  Member-EXPR         :FUNC[:UINT64][:PTR[:UINT8]]
+  Member-EXPR         :FUNC[:PTR[:UINT8], :PTR[:UINT8], :INT64][:PTR[:UINT8]]
+  Member-EXPR         :FUNC[:PTR[:UINT8], :ELLIPSIS][]
+  Overload-Overload   overload:(ADD_INT,ADD_FLOAT,ADD_STR,ADD_PTR_INT) |}]
 
 
 let%expect_test "type-resolution -- regex-redux" =
     run_test_file "examples/benchmarks_game/regex-redux.coral";
     [%expect {|
-    "Member reference not found: Member {base = (Var stdin); member = \"fd\"}" |}]
+    Import-io         *
+    Import-regex      *
+    IntLiteral-0      0i
+    Var-FdReader      'FdReader'
+    TypeDecl-FdReader 'FdReader'
+    ("unknown instantiation"
+     ((callee (Var FdReader)) (callee_type FdReader) (args_types (0))))
+    (Failure "unknown instantiation") |}]
 
 
 (* TODO: this has an issue because I guess Ast.fold_map is creating new refs

@@ -155,7 +155,7 @@ expr
 typedef
     : IDENTIFIER { Make.var $1 }
     | typedef DOT IDENTIFIER { Make.member $1 $3 }
-    | typedef LBRACKET separated_list(COMMA, type_parameter) RBRACKET { Make.callNode $1 $3 }
+    | typedef LBRACKET separated_list(COMMA, type_parameter) RBRACKET { Make.index $1 $3 }
     | ELLIPSIS { Make.var "..." }
 
 type_parameter
