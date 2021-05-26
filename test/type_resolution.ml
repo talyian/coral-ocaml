@@ -49,6 +49,7 @@ let show_line types line =
   | _ -> ()
 
 end
+
 open Utils
 
 let%expect_test "types - hello world" =
@@ -59,11 +60,6 @@ func main ():
   printf("Hello, %s\n", "World")
 |};
   [%expect {|
-      (extern
-       ((name printf)
-        (typ 
-         (Index (callee (Index (callee (Var Func)) (args ((Var ...))))) (args ())))
-        (typ_type (Applied (Applied FUNC (instance_of ELLIPSIS))))))
       Call-printf   :VOID
       Extern-printf :FUNC[:ELLIPSIS][]
       main          FUNC[][]
@@ -96,23 +92,9 @@ let%expect_test "types - imports" =
 let CStr = Ptr[Int8]
 extern("c", "getenv", Func[CStr][CStr])
 extern("c", "printf", Func[...][])
-let ptr: CStr = getenv("LANG")
-printf("%s", ptr)
-
+let ptr = getenv("LANG")
+let letter = deref ptr 0
 |}; [%expect{|
-  (extern
-   ((name getenv)
-    (typ
-     (Index (callee (Index (callee (Var Func)) (args ((Var CStr)))))
-      (args ((Var CStr)))))
-    (typ_type
-     (Applied (Applied FUNC (instance_of (Applied PTR (instance_of INT8))))
-      (instance_of (Applied PTR (instance_of INT8)))))))
-  (extern
-   ((name printf)
-    (typ
-     (Index (callee (Index (callee (Var Func)) (args ((Var ...))))) (args ())))
-    (typ_type (Applied (Applied FUNC (instance_of ELLIPSIS))))))
   <module>      *
   Call-getenv   :PTR[:INT8]
   Call-printf   :VOID
@@ -141,35 +123,6 @@ func main():
 |}
 
 ;[%expect {|
-  (extern
-   ((name malloc)
-    (typ
-     (Index (callee (Index (callee (Var Func)) (args ((Var Uint64)))))
-      (args ((Var Cstr)))))
-    (typ_type
-     (Applied (Applied FUNC (instance_of UINT64))
-      (instance_of (Applied PTR (instance_of UINT8)))))))
-  (extern
-   ((name memcpy)
-    (typ
-     (Index
-      (callee
-       (Index (callee (Var Func)) (args ((Var Cstr) (Var Cstr) (Var Int64)))))
-      (args ((Var Cstr)))))
-    (typ_type
-     (Applied
-      (Applied FUNC (instance_of (Applied PTR (instance_of UINT8)))
-       (instance_of (Applied PTR (instance_of UINT8))) (instance_of INT64))
-      (instance_of (Applied PTR (instance_of UINT8)))))))
-  (extern
-   ((name printf)
-    (typ
-     (Index (callee (Index (callee (Var Func)) (args ((Var Cstr) (Var ...)))))
-      (args ())))
-    (typ_type
-     (Applied
-      (Applied FUNC (instance_of (Applied PTR (instance_of UINT8)))
-       (instance_of ELLIPSIS))))))
   Call-+              *
   Call-EXPR           :PTR[:UINT8]
   Call-EXPR           :PTR[:UINT8]
@@ -208,12 +161,12 @@ let%expect_test "type-resolution -- regex-redux" =
     Import-io         *
     Import-regex      *
     IntLiteral-0      0i
-    Var-FdReader      'FdReader'
-    TypeDecl-FdReader 'FdReader'
-    ("unknown instantiation"
-     ((callee (Var FdReader)) (callee_type FdReader) (args_types (0))))
+    Var-FdReader      'TODO: struct-FdReader'
+    TypeDecl-FdReader 'TDO: struct-FdReader'
+    ("TODO: unknown instantiation"
+     ((callee (Var FdReader)) (callee_type "TODO: struct-FdReader")
+      (args_types (0))))
     (Failure "unknown instantiation") |}]
-
 
 (* TODO: this has an issue because I guess Ast.fold_map is creating new refs
    when we need to keep the old refs *)

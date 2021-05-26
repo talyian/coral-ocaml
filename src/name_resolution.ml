@@ -145,7 +145,9 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
   | Ast.Type {typ} ->
       Ast.show typ |> Stdio.print_endline ;
       Caml.exit 0
-  | Ast.TypeDecl {name; _} -> {data with current_scope= Scope.add name node data.current_scope}
+  | Ast.TypeDecl {name; fields; _} ->
+      let data = List.fold ~init:data ~f:run fields in
+      {data with current_scope= Scope.add name node data.current_scope}
   | Ast.TypeAlias {name; _} -> {data with current_scope= Scope.add name node data.current_scope}
   | _ -> Ast.fold ~init:data ~f:run node
 

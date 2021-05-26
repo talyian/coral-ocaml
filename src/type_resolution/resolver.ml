@@ -152,7 +152,7 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * Typespec.t =
       (t, Typespec.Overload item_types)
   | Ast.Extern {name; typ; _} ->
       let t, typ_type = check_type t typ in
-      Stdio.print_s [%sexp "extern", {name: string; typ: Ast.t; typ_type: Typespec.t}] ;
+      (* Stdio.print_s [%sexp "extern", {name: string; typ: Ast.t; typ_type: Typespec.t}] ; *)
       (t, Typespec.InstanceOf typ_type)
   | Ast.Member {base; member} -> (
       let base = Names.deref_var t.ns base |> Option.value ~default:base in
@@ -166,7 +166,31 @@ and check_type_raw (t : Resolver.t) (node : Ast.t) : Resolver.t * Typespec.t =
           (* foo.bar might refer to type-directed method lookup *)
           failwith @@ "unhandled member type: ^ " ^ Ast.show node )
   | Ast.TypeAlias {name; typ} -> check_type t typ
-  | Ast.TypeDecl {name; metatype; fields} -> (t, ConstString name)
+  | Ast.TypeDecl {name; metatype= "struct"; fields} ->
+      (* TODO: the type of a typedecl T has the following properties:
+         T.type == Type (* is this true? what about parameterized types? *)
+         T.fields == fields
+         T.name == name
+         T.constructor = Func[...fields...][T]
+      *)
+      (* This is recursive, because T.constructor needs to reference T. *)
+      Stdio.print_s [%sexp "fields", (fields : Ast.t list)] ;
+      let t, fields = List.fold_map ~init:t ~f:check_type fields in
+      let this_type =
+        let field_type = Typespec.Const (Builtins.Custom "Type") in
+        let field_fields = [] in
+        let field_name = Typespec.ConstString name in
+        (* let field_constructor_type =
+         *   Typespec.(
+         *     let func = Const Builtins.FUNC in
+         *     Applied (Applied (func, fields), [this_type])) in *)
+        Typespec.Record
+          [ (Some "name", field_name)
+          ; (Some "fields", Applied (Const (Custom "List"), field_fields))
+          ; (Some "type", field_type) (* (Some "constructor_type", field_constructor_type) *)
+          ; (Some "metatype", Const (Custom "struct")) ] in
+      (t, this_type)
+  | Ast.TypeDecl {name; metatype; fields} -> (t, ConstString ("TODO: type-" ^ name))
   | Ast.Var {name; _} ->
       let reference =
         Option.value_exn ~message:("name not found: " ^ name) (Names.deref_var t.ns node) in
@@ -234,12 +258,12 @@ and instantiate_call t callee callee_type args_types : Resolver.t * Instance.t =
   | Overload items ->
       let result_type = Typespec.Error in
       (t, Instance.{callee; callee_type; args_types; result_type})
-  | _ ->
+  | callee_type ->
       dump t ;
       Stdio.print_endline
       @@ Sexp.to_string_hum
            [%sexp
-             "unknown instantiation"
+             "TODO: unknown instantiation"
              , {callee: Ast.t; callee_type: Typespec.t; args_types: Typespec.t list}] ;
       failwith "unknown instantiation"
 

@@ -1,4 +1,76 @@
 
+** Functions (parametrically polymorphic)
+A function  is parametrically  polymorphic if it has free type variables in its signature
+
+
+** Functions (monomorphic)
+
+A function is monomorphic if it has no free type variables
+
+Behaviors: ~call~
+
+Data Model:
+
+Func {
+  params: T list
+  returnval: T
+  call(x): if x ~~~ params then returnval
+}
+
+#+BEGIN_SRC coral
+func foo(a:A, b:B):
+  return a + b
+#+END_SRC
+
+| foo                 | :Func[:A, :B][:C] |
+|---------------------+-------------------|
+| call(foo, [:A, :B]) | :C                |
+
+*** Varargs
+
+TODO
+
+*** Named parameters
+
+TODO
+
+** Tuples (monomorphic)
+
+Tuple {
+  fields:              T list
+  call(x):             if x ~~~ fields then instanceof self
+  static_index(index): fields[index]
+  runtime_index():
+}
+** Structs (monomorphic)
+#+BEGIN_SRC coral
+type Person = struct {
+  age: Int32
+  name: Str
+  weight: Float64
+}
+#+END_SRC
+
+Data Model:
+
+Struct {
+  fields: (string * T) list
+  call(x): if x ~~~ map snd fields then instanceof self
+  member(name): find (fst >> = name) fields |> snd
+}
+
+|-------------------------------------+----------|
+| Person                              | :Type    |
+|-------------------------------------+----------|
+| call(Person, [Int32; Str; Float64]) | :Person  |
+| member_type(:Person, "age")         | :Int32   |
+| member_idx (:Person, "age")         | 0        |
+| member_type(:Person, "name")        | :Str     |
+| member_idx (:Person, "name")        | 1        |
+| member_type(:Person, "weight")      | :Float64 |
+| member_idx (:Person, "weight")      | 2        |
+|-------------------------------------+----------|
+
 # Examples:
 
 extern("c", "malloc", Func[Int64][Ptr[Int8]])

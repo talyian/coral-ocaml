@@ -200,5 +200,5 @@ separated_list_trailing_s(S, X)
     | separated_list_trailing_s(S, X) S { $1 }
 
 typedecl_field
-    : IDENTIFIER COLON typedef { Make.empty }
-    | IDENTIFIER COLON typedef EQ expr { Make.empty }
+    : IDENTIFIER COLON typedef { Make.param 0 $1 (Some $3) }
+    | IDENTIFIER COLON typedef EQ expr { Make.param 0 $1 (Some $3) }

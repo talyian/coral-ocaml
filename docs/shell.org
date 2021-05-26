@@ -1,0 +1,24 @@
+
+
+* Shell
+** Todo
+cat "filename"
+cat -
+
+wc
+grep
+time
+which
+
+** File System
+*** Info
+ls
+ls ()
+ls "foo"
+ls(recursive=true, "foo")
+
+*** Traversal
+cd
+pwd
+pushd
+popd
