@@ -11,7 +11,15 @@ open Base
  * import foo.bar.baz (alpha, Bravo as beta)
  *)
 type importType = Module of string option | All | ImpMember of string * string option
-[@@deriving compare, sexp, show]
+[@@deriving compare, sexp]
+
+let pp_importType fmt = function Module None -> () | _ -> ()
+
+let show_importType = function
+  | Module None -> ""
+  | Module (Some s) -> " as " ^ s
+  | All -> "*"
+  | ImpMember (a, _) -> a
 
 (* make sexp skinnier by hiding the refs *)
 module Sexp_ref : sig

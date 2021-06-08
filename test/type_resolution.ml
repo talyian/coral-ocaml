@@ -3,50 +3,53 @@ open Coral_core
 open Coral_frontend
 
 module Utils = struct
-let get_types source =
-  let%bind.Result imports = Test_utils.parse_with_imports source in
+  let get_types source =
+    let%bind.Result imports = Test_utils.parse_with_imports source in
     let names = Coral_passes.Name_resolution.construct imports in
     (* Coral_passes.Name_resolution.show names; *)
     let names = Coral_passes.Name_resolution.get_data names in
-(* TODO: running attribute resolution after name resolution has the problem that
-any new nodes we generate have to be remapped in the name reference table.
-   It would really like to go after name resolution, however, since both the
-   decorator name and its arguments can depend on name resolution *)
-  (* let attributes, main = Coral_passes.Attribute_resolution.run imports.main in *)
+    (* TODO: running attribute resolution after name resolution has the problem that
+       any new nodes we generate have to be remapped in the name reference table.
+       It would really like to go after name resolution, however, since both the
+       decorator name and its arguments can depend on name resolution *)
+    (* let attributes, main = Coral_passes.Attribute_resolution.run imports.main in *)
     let types = Coral_types.Resolver.construct names imports.main in
-  Ok types
+    Ok types
 
-let run_test_file file =
-  match
-  let%map.Result imports = Test_utils.parse_file_with_imports file in
-  let names = Coral_passes.Name_resolution.construct imports in
-  let names = Coral_passes.Name_resolution.get_data names in
-  let types = Coral_types.Resolver.construct names imports.main in
-  types
-  with | Ok types ->
-    Coral_types.Resolver.dump types;
-  | Error e ->
-    Stdio.print_endline @@ Frontend.show_parseError e;
-  | exception e ->
-    Stdio.print_endline @@ Exn.to_string e
+  let run_test_file file =
+    match let%map.Result imports = Test_utils.parse_file_with_imports file in
+      let names = Coral_passes.Name_resolution.construct imports in
+      let names = Coral_passes.Name_resolution.get_data names in
+      (* let types = Coral_types.Visitor.construct names imports.main in *)
+      () with
+    | Ok () -> ()
+    | Error e -> Stdlib.print_endline @@ Frontend.show_parseError e
+    (*   let types = Coral_types.Resolver.construct names imports.main in
+     *   types
+     * with | Ok types ->
+     *   Coral_types.Resolver.dump types;
+     *      | Error e ->
+     *        Stdio.print_endline @@ Frontend.show_parseError e;
+     *      | exception e ->
+     *        Stdio.print_endline @@ Exn.to_string e *)
 
-let show_types source = match get_types source
-with
-  | Ok types ->
-    Coral_types.Resolver.dump types;
-  | Error e ->
-    Stdio.print_endline @@ Frontend.show_parseError e;
-  | exception e ->
-    Stdio.print_endline @@ Exn.to_string e
-;;
+  let show_types source = match get_types source
+    with
+    | Ok types ->
+      Coral_types.Resolver.dump types;
+    | Error e ->
+      Stdio.print_endline @@ Frontend.show_parseError e;
+    | exception e ->
+      Stdio.print_endline @@ Exn.to_string e
+  ;;
 
-let show_line types line =
-  match types with
-  | Ok (types:Coral_types.Resolver.Resolver.t) ->
-    Map.filter_keys ~f:(fun k -> String.(Ast.show_short k = line))  types.types
-    |> Map.min_elt_exn |> snd |> Coral_types.Typespec.show
-    |> Stdio.print_endline
-  | _ -> ()
+  let show_line types line =
+    match types with
+    | Ok (types:Coral_types.Resolver.Resolver.t) ->
+      Map.filter_keys ~f:(fun k -> String.(Ast.show_short k = line))  types.types
+      |> Map.min_elt_exn |> snd |> Coral_types.Typespec.show
+      |> Stdio.print_endline
+    | _ -> ()
 
 end
 
@@ -154,6 +157,19 @@ func main():
   Member-EXPR         :FUNC[:PTR[:UINT8], :ELLIPSIS][]
   Overload-Overload   overload:(ADD_INT,ADD_FLOAT,ADD_STR,ADD_PTR_INT) |}]
 
+
+let%expect_test "type-resolution -- regex-redux" =
+    run_test_file "examples/benchmarks_game/regex-redux.coral";
+    [%expect {|
+    Import-io         *
+    Import-regex      *
+    IntLiteral-0      0i
+    Var-FdReader      'TODO: struct-FdReader'
+    TypeDecl-FdReader 'TDO: struct-FdReader'
+    ("TODO: unknown instantiation"
+     ((callee (Var FdReader)) (callee_type "TODO: struct-FdReader")
+      (args_types (0))))
+    (Failure "unknown instantiation") |}]
 
 let%expect_test "type-resolution -- regex-redux" =
     run_test_file "examples/benchmarks_game/regex-redux.coral";

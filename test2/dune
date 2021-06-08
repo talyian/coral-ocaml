@@ -1,0 +1,12 @@
+(library
+ (name test2)
+ (inline_tests
+  (flags -verbose))
+ (libraries unix coral_frontend coral_core coral_passes coral_types)
+ (preprocess
+  (pps ppx_let ppx_sexp_value ppx_expect ppx_inline_test)))
+
+(env
+ (dev
+  (flags
+   (:standard -w +8-26-27-33))))

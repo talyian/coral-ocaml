@@ -1,6 +1,20 @@
 open Base
 open Coral_core
 
+module RecordType = struct
+  type 'a t = {name: string; fields: (int * string option * 'a) list} [@@deriving compare]
+
+  let index_of t target_name =
+    List.find_map t.fields ~f:(function
+      | i, Some name, v when String.equal name target_name -> Some i
+      | _ -> None)
+
+  let type_of t target_name =
+    List.find_map t.fields ~f:(function
+      | i, Some name, v when String.equal name target_name -> Some v
+      | _ -> None)
+end
+
 (* TypeSpec is the type solver's idea of a "type" It's more like a "compile-time-known
      constraint" *)
 type t =
@@ -10,6 +24,7 @@ type t =
   | ConstString of string
   | Const of Builtins.t
   | Record of (string option * t) list
+  | RecordType of t RecordType.t
   | InstanceOf of t (* e.g. 3 :: InstanceOf Int *)
   | TypeFor of t (* inverse of instanceof -- Int :: TypeFor (Const 3) *)
   | Applied of t * t list
@@ -48,6 +63,7 @@ let rec sexp_of_t = function
         | None -> [sexp_of_t value]
         | Some n -> [String.sexp_of_t n; sexp_of_t value] in
       Sexp.List (List.concat_map ~f:sexp_of_field fields)
+  | RecordType rc -> List [Atom "RecordType"; Atom rc.name]
   | Any -> Sexp.Atom "*"
   | Error -> Sexp.Atom "Error"
   | ConstFloat f -> Float.sexp_of_t f
@@ -69,6 +85,7 @@ and show0 n = function
   | ConstString s -> "'" ^ String.escaped s ^ "'"
   | Const b -> Builtins.show b
   | Record record as r -> "{" ^ Sexp.to_string [%sexp (r : t)] ^ "}"
+  | RecordType _ as r -> Sexp.to_string [%sexp (r : t)]
   | Applied (a, b) -> show0 2 a ^ "[" ^ (String.concat ~sep:", " @@ List.map ~f:show b) ^ "]"
   | And (a, b) -> show0 2 a ^ " and " ^ show0 2 b
   | Overload items -> "overload:(" ^ (String.concat ~sep:"," @@ List.map ~f:show items) ^ ")"
