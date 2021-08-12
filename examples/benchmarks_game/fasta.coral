@@ -1,5 +1,5 @@
 import process
-import sync_io(print, put_byte)
+import io (print, put_byte)
 
 func repeatFasta(n, src):
   for i in range n:
@@ -11,16 +11,56 @@ func random(n):
   set seed = (seed * 3877 + 29573) % 138868
   seed * n / 138868
 
+func linear_search(table, target):
+  for i in table.indices:
+    if table.[i] < target:
+      return Found i
+      break
+  return Not_found
+
+# Binary search a table that is already in sorted order
+func binary_search(table, target):
+  let end = len(table)
+  if end < 1: return Not_found
+  let midpoint = end / 2 (** static_prove: midpoint < end *)
+  match table.[midpoint] <=> target:
+    Equal: return Found midpoint
+    Less: return binary_search(table.[0 .. midpoint], target)
+    More: return binary_search(table.[(midpoint + 1) .. end], target)
+
+# Mutable parameters: we mutate the parameter here.
+# It's unclear whether the mutations are supposed to propagate to the caller
+# However, it's moot if the caller never references the argument after the call.
+# So only if the argument is re-referenced
+# should the compiler force a "copy or ref" parameter check at the call site.
+# (should this be per call-site or per function declaration?)
+# I think if you always "ref", being explicit at the call site is good.
+# If you always "copy", just make a clone of the parameter.
 func randomFasta(n, table):
-  table = table.fold(0.0, func (p, (a, b)): (p + b, (a, p + b)))
+  # the fold here is the same as the loop below. Not sure which one is more clear
+  # table = table.fold(0.0, func (p, (a, b)): (p + b, (a, p + b)))
+
+  # This is equivalent to the fold above. The range needs to provide a proof that
+  # 1 <= i < len, which satisfies both 0 <= i < len and 0 <= i - 1 < len
+  # so the indexing can be unchecked.
+  # Additionally, table[i] in each iteration becomes table[i - 1] in the next
+  # So we should be able to elide a load.
+
+  for i in range(1, len(table)):
+    set table[i][1] = table[i-1][1] + table[i][1]
+
   for i in range n:
-    let r = random 1.0
-    for (a, b) in table:
-      if b < random:
-        put_byte a
-        break
-    if i % 60 = 0: put_byte '\n'
-  if n % 60: put_byte '\n'
+    # This might be faster if the table is SoA layout.
+    # Maybe we can have some automatic keyword that lets us
+    # change the layout of 2D grids to be column-major
+    match binary_search(table.columns[1], random 1.0):
+      Found {index}: put_byte table.[index].[0]
+      Not_found:
+        # This allows the optimizer to assume that we always find a value
+        # Note that this shouldn't opt out of safety checks unless we use unchecked_impossible
+        impossible
+
+    if i % 60 = 59: put_byte '\n'
 
 let n = i32(process.argv[1])
 

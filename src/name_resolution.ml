@@ -76,8 +76,8 @@ let rec run imports (data : NameTraversal.t) (node : Ast.t) : NameTraversal.t =
         List.fold ~init:scope
           ~f:(fun scope imp ->
             match imp with
-            | Ast.Module (Some module_name) -> Scope.add module_name imported_module scope
-            | Ast.Module None -> Scope.add path_name imported_module scope
+            | Ast.ModuleAlias module_name -> Scope.add module_name imported_module scope
+            | Ast.ModuleImport -> Scope.add path_name imported_module scope
             | All -> scope (* TODO *)
             | ImpMember (member, Some name) ->
                 let imported_member =

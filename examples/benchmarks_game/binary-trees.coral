@@ -2,20 +2,37 @@
 import console
 import io (printf)
 
-# TODO: unlabeled tuples: type Tree = struct { :Ptr[Tree]; :Ptr[Tree] }
-type Tree = struct { left:Ptr[Tree]; right:Ptr[Tree] }
+module Tree_as_product:
+  # TODO: unlabeled tuples: type Tree = struct { :Ptr[Tree]; :Ptr[Tree] }
+  type Tree = struct { left:Ptr[Tree]; right:Ptr[Tree] }
 
-func tree(depth):
-  if depth = 0:
-     return Tree(null, null)
-  else:
-     return Tree(tree(depth - 1), tree(depth - 1))
+  func tree(depth):
+    if depth = 0:
+       return Tree(null, null)
+    else:
+       return Tree(tree(depth - 1), tree(depth - 1))
 
-func check(t):
-  if t[0] = null:
-     return i32 1
-  else:
-     return check(t[0]) + 1 + check(t[1])
+  func check(t):
+    if t[0] = null:
+       return i32 1
+    else:
+       return check(t[0]) + 1 + check(t[1])
+
+module Tree_as_sum:
+  type Tree = union {
+     | Empty
+     | Node of struct { left:Ptr[Tree]; right:Ptr[Tree] }
+  }
+
+  func tree(depth):
+    match depth:
+      (0): return Empty
+      (_): return tree(depth - 1, depth - 1)
+
+  func check(t):
+    match t:
+      Empty: 1
+      Node(a, b): check a + check b + 1
 
 let max_depth = max(6, i32 console.args[1]) ?? 10
 let min_depth = 4

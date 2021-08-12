@@ -1,16 +1,39 @@
 # K-Nucleotide
+# main purpose  is to benchmark the dictionary implementation
+# also - string interpolation
+#      - synchronous
+
+# Use 2 bits per base to be more compact
+type Sequence = struct { length: int32; quads: Array(Int8) }
+func create_sequence(string):
+  let length = string.length
+  let quads = Array.zero_create ((length + 3) / 4)
+  for i, c in string.enumerate():
+    let c = match c:
+      'g': 0
+      'a': 1
+      't': 2
+      _  : 3
+    set quads[i/4] |= c << (i % 4)
+  Sequence {length; quads}
+
+func Sequence.slice(start, end):
+  let byte_length = (end - start + 3) / 4
+  let quads = Array.zero_create byte_length
+  # TODO implementation
+  return Sequence { length = end - start; quads }
+
+func Sequence.hash():
+  # TODO implementation
 
 let dna = (stdin.bytes.lines()
-    .skipUntil((x) => x.startswith ">THREE")
+    .skip_until((x) => x.startswith ">THREE")
     .skip(1)
-    .takeUntil((x) => x.startswith ">").map(uppercase).join())
+    .take_until((x) => x.startswith ">").map(create_sequence).join())
 
 func build_table(n):
-  # The really fast implementations customize the encoding into a 2-bit representation
-  # and also customize the hash function. We don't do that here, since our goal is so track
-  # perf of slicing and the default dict[str, ...] implementation.
   let table = DefaultDict()
-  for (start) in range(0, dna.length() - n + 1):
+  for (start) in range(0, dna.length - n + 1):
     set table[dna.slice(start, start + n)] += 1
   return table
 

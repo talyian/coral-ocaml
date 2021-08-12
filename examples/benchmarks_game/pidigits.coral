@@ -8,6 +8,12 @@ import console
 let k = 1
 let n = Int64 (console.args[1])
 
+# Here we create bigints. We might want that the default
+# Integer type should be bigint rather than int64. That might
+# turn out to be too slow? For the same reason the defualt
+# float type is IEEE binary64 rather than a decimal64 or bigrational.
+# we could compile pragmas per file compile_option (bigint_literal, decimal64_literal) etc.
+
 let u = bigint 0
 let v = bigint 0
 let w = bigint 0
@@ -39,5 +45,5 @@ func digits():
 
 for (i, d) in digits().take(n).indexed():
    stdout.write d
-   if i % 10 == 9 or i == n - 1:
+   if i % 10 = 9 or i = n - 1:
      print $"\t:{i+1}\n"

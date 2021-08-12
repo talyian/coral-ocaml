@@ -146,7 +146,7 @@ In other places, we might be able to get away with requiring parentheses. *)
 expr
     : e=binary_op_expr { e }
     | expr_atom COLON typedef { $1 }
-    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Make.import path [Coral_core.Ast.Module None] }
+    | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) { Make.import path [Coral_core.Ast.ModuleImport] }
   | IMPORT path=separated_nonempty_list(DOT, IDENTIFIER) LPAREN items=separated_list(COMMA, IDENTIFIER) RPAREN {
        Make.import path (Base.List.map ~f:(fun s -> Coral_core.Ast.ImpMember (s, None)) items) }
     | EXTERN LPAREN fftype=STRING COMMA name=STRING COMMA _type=typedef RPAREN {

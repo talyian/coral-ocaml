@@ -2,7 +2,7 @@ open Coral_core
 open Base
 
 (* create a type solver environment specialized to our Ast nodes *)
-module Env = Coral_types.Env2 (struct
+module Env = Coral_types.DebuggingEnv (struct
   type t = Ast.t
 
   let sexp_of_t t = Ast.sexp_of_t t
@@ -35,18 +35,25 @@ let rec visit names (t : Env.t) (node : Ast.t) : Env.t * Env.term =
   | Ast.Func _ -> failwith "Func"
   | Ast.If _ -> failwith "If"
   | Ast.Import {path; names} ->
-      Stdio.printf "import %s - %s\n" (String.concat ~sep:"." path)
-        (String.concat ~sep:", " (List.map names ~f:Ast.show_importType)) ;
-      Env.add_term node t
+      (t, Env.term 0)
+      (* let rec loop_over_names = function
+       *   | [] -> ()
+       *   | Ast.All :: rest -> loop_over_names rest
+       *   | ModuleImport :: rest -> loop_over_names rest
+       *   | ModuleAlias _ :: rest -> loop_over_names rest
+       *   | ImpMember (m, Some n) :: rest -> loop_over_names rest
+       *   | ImpMember (a, None) :: rest -> loop_over_names rest in
+       * loop_over_names names ; Env.add_term node t *)
   | Ast.Index _ -> failwith "Index"
   | Ast.IntLiteral {value; _} -> Env.const_term_for (Env.ConstInt value) t
   | Ast.Let {name; typ; value} ->
-      let t = recurse t value in
-      Stdio.printf "let %s\n" name ; t
+      let t, value_term = recurse t value in
+      let t, term = Env.add_term node t in
+      let t = Env.term_is term (Term value_term) t in
+      (t, term)
   | Ast.List _ -> failwith "List"
   | Ast.Member {base; member} ->
       let t = recurse t base in
-      Stdio.printf "%s.%s\n" (Ast.show_short base) member ;
       t
   | Ast.TypeDecl {name; metatype= "struct"; fields} ->
       (* create a struct term *)

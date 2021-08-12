@@ -1,0 +1,15 @@
+* tuples, structs and functions
+This milestone gives us C-like functionality. We can declare functions and S
+* Sum types and Match
+
+* Methods
+
+* Namespaces
+
+* Type Inference
+
+* Higher Kinded types
+
+* Monads
+
+* Effects

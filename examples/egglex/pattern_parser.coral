@@ -1,0 +1,136 @@
+type String = struct {
+  buf: Ptr[Uint];
+  len: Int32;
+}
+
+type Res = struct {
+  Next: Ptr[Uint8];
+  Len: Int32;
+  Pattern: Pattern;
+}
+
+type Result(Value, Err) = union {
+  Fail: Error;
+  Ok: Value;
+}
+
+func parse_exact(c, input) -> Res:
+  if input.len >= 0 && input[0] = c: return Res(input + 1, len - 1, Literal c)
+  return Res(0, 0, 0)
+
+func parse_exact(c, input) -> Res:
+  if input.len >= 0 && input[0] = c:
+    Ok(advance input, Literal c)
+  else:
+    Fail ()
+
+
+
+
+# implicit Monad
+# method Result.Bind(f):
+#   match this:
+#     Fail: Fail
+#     Ok a: f a
+# func Result.Return(v): Ok v
+
+# Explicit monad
+# class Monad = struct {
+#   type M
+#   val Return: a -> M a
+#   val Bind: M a -> (a -> M b) -> M b
+# }
+
+# In this monad, chain a bunch of fallible steps
+# failing fast whenever one step fails
+module try_result_monad(Err):
+  type T(Value) = Result(Value, Err)
+  func Bind(t: T _, f): match result { Fail { Fail } Ok(a) { f a } }
+  func Return(v: _): Ok v
+
+# In this monad, chain a bunch of fallible steps
+# and return the first successful one
+module try_else_monad(Value) = struct {
+  type T(Error) = Result(Value, Error)
+  func Bind(t:T _, f): match t { Fail e { f e } Ok a { Ok a } }
+  func Return(error): Fail error
+}
+
+# If we can encode Error as an effect, it'd look like this?
+# We could even encode the input mutation as part of the effect
+
+#    let (input, left) = parse_SeqExpr input
+#    try:
+#      let (input, _) = parse_exact '|'
+#      let (input, right) = parse_SeqExpr input
+#      (input, Pattern.make_Opt(left, right))
+#    with:
+#      (input, left)
+
+# Alternately, the monadic form:
+# the Try monad is an inverted Result monad
+# where the bind calls on Fail instead of Succeed
+
+# let! (input, left) = parse_SeqExpr input
+# let! () = Try:
+#   let! (input, _) = parse_exact '|'
+#   let! (input, right) = parse_SeqExpr input
+#   Ok(input, Pattern.make_Opt(left, right))
+# Ok(input, left)
+
+# Parses an alternation pattern (Pipe operator). This is the main parse function
+# since it has the lowest effective precedence.
+#     opt_expr : seq_expr '|' opt_expr
+#              | seq_expr
+func parse_OptExpr(input);
+   match parse_SeqExpr(input):
+    Fail: return Fail
+    Ok (input, left):
+      match parse_exact('|'):
+         Fail: return left
+         Ok (input, _):
+           match parse_SeqExpr(input):
+             Fail: return left
+             Ok (input, right):
+               return Ok(input, Pattern.make_Opt(left, right))
+
+# seq_expr   :
+#            | LITERAL seq_expr
+#            | '[' range ']' seq_expr
+#            | escape seq_expr
+#            | '(' opt_expr ')' seq_expr
+func parse_SeqExpr(input):
+   let! (input, first) =:
+     let.Try! () = parse_Literal input
+     let.Try! () =:
+       let! (input, _) = parse_exact('[', input)
+       let! (input, range) = parse_range input
+       let! (input, _) = parse_exact(']', input)
+       Ok(input, range)
+     let.Try! () =parse_escape input
+     let.Try! () =:
+       let! (input, _) = parse_exact('(', input)
+       let! (input, expr) = parse_OptExpr input
+       let! (input, _) = parse_exact('(', input)
+       Ok(input, expr)
+     Fail
+   match parse_SeqExpr input:
+     Fail: Ok(input, first)
+     Ok(input, second): Ok(input, Pattern.make_Seq(first, second))
+
+
+
+   # range      : range_item
+   #            | range range_item
+
+   # range_item : LITERAL
+   #            | LITERAL '-' LITERAL
+   #            | escape
+   # escape : '\' '\'
+   #        | '\' '.'
+   #        | '\' 'w'
+   #        | '\' 'S'
+   #        | '\' 'n'
+   #        | '\' 't'
+   #        | '\' 'r'
+   #        | '\' 'r'

@@ -1,3 +1,96 @@
+# TODO: The constructors for Seq and Or can disallow Left-leaning recursion
+# TODO: And and Not constructors as well
+# TODO: Capturing groups
+# TODO: Noncapturing groups
+# TODO: Zero-width assertions
+# TODO: Lookaround
+# TODO: Boyer-moore skip?
+# TODO: SIMD matching
+type Pattern = union {
+  Lit: Int8
+  Seq: Pattern * Pattern
+  Or: Pattern * Pattern
+  Star: Pattern
+  Plus: Pattern
+  Opt: Pattern
+  Dot
+  Empty
+  Error
+  Escape: String
+  Brackets: BracketPattern list
+}
+
+type BracketPattern = union {
+  Escape: String
+  Range: Int8 * Int8
+  Literal: Int8
+}
+
+# This is a simpler type we can use to make creating the automaton easier
+# Theoretically it is unecessary to convert Pattern to MinPattern - maybe benchmark
+# to check compilation overhead?
+type MinPattern = union {
+  Lit: Int8
+  Seq: MinPattern * MinPattern
+  Or:  MinPattern * MinPattern
+  Empty
+  Error
+  Star: MinPattern
+}
+
+# TODO: methods
+func deriv(pattern:MinPattern, c:char):
+  match pattern:
+    Lit (x): if x = c then Empty else Error
+    Seq (a, b):
+      match can_be_empty a:
+        true: Or(deriv(b, c), seq(deriv(a, c), b))
+        false: seq(deriv(a, c), b)
+    Or (a, b): Or(deriv(a, c), deriv(b, c))
+    Empty: Error
+    Error: Error
+    Star x: Seq(deriv(x, c), Star(x))
+
+# TODO: needed feature: generators
+# TODO: needed feature: methods
+# TODO: needed features: nested functions
+# TODO: needed features: Pattern matching
+# TODO: needed features: break
+func (pattern:MinPattern).match(s, i = 0):
+  if pattern = Empty: yield (i, i)
+  if s.length = i: return
+  let q = p
+  let current_match =
+    for j in range(i, s.length):
+      match q.derive(s[j]):
+        Error: break Fail
+        Empty: break Success j
+        (d): set q = d
+  match current_match:
+    Success j: yield (i, j)
+    _ : ()
+  pattern.match(s, i + 1)
+
+func CreateTable(pattern):
+  let queue = [0]
+  let states = [{}]
+  while true:
+    state = queue.pop()
+    for c in range(256):
+      let s1 = state.transition(c)
+      let s1 = memo_find(states, s1)
+      match s1:
+        Found s1: ()
+        NotFound s1: queue.add s1
+  return states
+
+func optimize_table(table):
+
+  ...
+
+func search_pattern(string, pattern): ...
+func search_table(string, table): ...
+
 # regex-redux mainly an exercise of the regular expression library
 # Short Term Goals:
 # - Get this syntax parsed/typechecked, implement regex and stdout/stdin libraries

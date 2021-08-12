@@ -6,18 +6,22 @@ open Base
 
 (* Represents a thing you import:
  * import foo.bar.baz
- * import foo.bar.baz as baz123
+ * import foo.bar.baz (. as baz123)
  * import foo.bar.baz (...)
- * import foo.bar.baz (alpha, Bravo as beta)
+ * import foo.bar.baz (..., alpha, Bravo as beta)
  *)
-type importType = Module of string option | All | ImpMember of string * string option
+type importType =
+  | ModuleImport (* direct import *)
+  | ModuleAlias of string (* import with alias *)
+  | All (* star *)
+  | ImpMember of string * string option
 [@@deriving compare, sexp]
 
-let pp_importType fmt = function Module None -> () | _ -> ()
+let pp_importType fmt = function ModuleImport -> () | _ -> ()
 
 let show_importType = function
-  | Module None -> ""
-  | Module (Some s) -> " as " ^ s
+  | ModuleImport -> ""
+  | ModuleAlias s -> " as " ^ s
   | All -> "*"
   | ImpMember (a, _) -> a
 
