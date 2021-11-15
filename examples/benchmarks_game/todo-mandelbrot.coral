@@ -1,20 +1,35 @@
 # Mandelbrot
 
+type complex(a) = struct { r : a, i: a }
+func (*) for (a: complex, b:complex):
+  complex {
+    r = a.r * b.r - a.i * b.i,
+    i = a.i * b.r + a.r + b.i
+  }
+func (+) for (a: complex, b:complex):
+  complex {r = a.r + b.r, i = a.i + b.i }
+
+func abs_squared (a:complex):
+  (a.r * a.r + a.i * a.i)
+
+func abs for (a:complex):
+  sqrt(a.r * a.r + a.i * a.i)
+
 # thread parallelism - this problem is embarrassingly parallel
 # SIMD - we can do the inner loop in parallel on multiple passes
 let iter = 50
 for x in range(0, h):
   for y in range(0, w):
     let pixel = val:
-      let Z = complex()
       let C = complex(2 * x / w - 1.5, 2 * y / h - 1)
+      let Z = C
       for i in range(iter):
+        if abs_squared Z > limit2: return 0
         # The *fast* examples in other languages keep
         # Z as a quad of Z.i, Z.r, Z.i**2, Z.r**2
         # I guess it's so you only square Z.i and r once and reuse them
         # for Zi**2 (+/-) Zr ** 2
         Z = Z * Z + C
-        if abs Z > limit: return 0
       return 1
     output = output << 1
     output |= pixel

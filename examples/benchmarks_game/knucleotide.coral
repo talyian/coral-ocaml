@@ -4,7 +4,10 @@
 #      - synchronous
 
 # Use 2 bits per base to be more compact
-type Sequence = struct { length: int32; quads: Array(Int8) }
+type Sequence = struct {
+   length: int32;
+   quads: Array(Int8)
+}
 func create_sequence(string):
   let length = string.length
   let quads = Array.zero_create ((length + 3) / 4)

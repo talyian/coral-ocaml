@@ -1,0 +1,84 @@
+
+type Array(T, length) = external { ... }
+
+
+type ArrayList(T) = struct {
+   size : Int32,
+   items: ∃(N) Array(T, N)
+}
+
+func ArrayList.create():
+   set size = 0
+   set items = Array(T, 10)
+
+func ArrayList.add(item):
+   @require items.length > 0
+   @require size <= items.length
+   if size = items.length:
+     set items.length += items.length
+     set items = Array(T, items.length)
+   @require items.length = items.length
+   @require size < items.length
+   set items[size] = item
+   set size += 1
+
+func ArrayList.insert_at(index, item):
+   this.add(items[size-1])
+   let i = size - 2
+   while i > index:
+     items[i] = items[i - 1]
+   items[index] = item
+
+func ArrayList.remove_at_swap(index):
+   @require size > 0
+   @require index < size
+   set items[index] = items[size - 1]
+   set size -= 1
+
+func ArrayList.pop(index):
+   this.remove_at_swap(size - 1)
+
+func ArrayList.remove_at_shift(index):
+   let i = size - 2
+   while i >= index:
+      set items[i] = items[i + 1]
+      set i -= 1
+
+func ArrayList.contains(item):
+   for i in range(0, size):
+      if items[i] = item: return True
+   False
+
+func ArrayList.find_index(item):
+   for i in range(0, size):
+      if items[i] = item: return i
+   -1
+
+func ArrayList.add_unique(item):
+   for i in range(0, size):
+      if items[i] = item: return
+   this.add(item)
+
+func ArrayList.remove_swap(item):
+   for i in range(0, size):
+      if items[i] = item:
+         return this.remove_at_swap(i)
+
+# A Chained Hash Table
+type ChainedHashTable(Key, Value, Collection) = struct {
+   size   : Int32,
+   capacity : Int32,
+   keys     : Array(Collection(Key)),
+   values   : Array(Collection(Value)),
+}
+
+func ChainedHashTable.insert(key, value):
+   keys[key.hash()].add(key)
+
+func ChainedHashTable.find(key):
+   match keys[key.hash()].find_index(key):
+     None: None
+     Some i: Some values[i]
+
+func ChainedHashTable.remove(key):
+   keys[key.hash()].remove(key)

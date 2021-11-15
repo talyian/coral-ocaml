@@ -4,30 +4,33 @@ import io (printf)
 
 module Tree_as_product:
   # TODO: unlabeled tuples: type Tree = struct { :Ptr[Tree]; :Ptr[Tree] }
-  type Tree = struct { left:Ptr[Tree]; right:Ptr[Tree] }
+  type Tree = struct {
+    left: Ptr Tree
+    right: Ptr Tree
+  }
 
   func tree(depth):
     if depth = 0:
-       return Tree(null, null)
+      return Tree(null, null)
     else:
-       return Tree(tree(depth - 1), tree(depth - 1))
+      return Tree(tree(depth - 1), tree(depth - 1))
 
   func check(t):
-    if t[0] = null:
-       return i32 1
+    if t.left = null:
+      return i32 1
     else:
-       return check(t[0]) + 1 + check(t[1])
+      return check (t.left) + 1 + check(t.right)
 
 module Tree_as_sum:
   type Tree = union {
      | Empty
-     | Node of struct { left:Ptr[Tree]; right:Ptr[Tree] }
+     | Node of Ptr struct { left: Tree; right:Tree }
   }
 
   func tree(depth):
     match depth:
-      (0): return Empty
-      (_): return tree(depth - 1, depth - 1)
+      (0): Empty
+      (_): tree(depth - 1, depth - 1)
 
   func check(t):
     match t:

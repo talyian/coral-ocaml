@@ -1,0 +1,73 @@
+
+** We should turn known values into constants
+
+Suppose you have a type or type constructor with some fields.
+
+#+BEGIN_SRC coral
+type Foobar(T) = struct {
+  length: Int32
+  Data: T
+}
+#+END_SRC
+
+What if you knew some values at compile time, then they can be elided at
+runtime. This makes the type itself smaller (~SizeOf(Const(3)) = 0~) and also
+makes the expression a constant type, which may allow better optimizations
+later.
+
+#+BEGIN_SRC coral
+type Foobar_x0 = struct { length: Const(3), data: Bool }
+let x : Foobar_x0 = { 3, true }
+let y : Const(3) = x.length
+let s : Const(1) = sizeof(Foobar_x0)
+#+END_SRC
+
+------
+
+The type ~Array~ is an exponential type of T^(1..L) we could encode this just
+using basic ADTS:
+
+#+BEGIN_SRC coral
+
+type Array(T, L) =:
+   if L = 0: struct { }
+   else: struct { item: T; next : Array(T, L - 1) }
+
+func Array.get(n):
+   if n < 0: None # Index too small
+   else if L = 0: None # Index too large
+   else if n = 0: item
+   else: next.get(n - 1)
+
+Array(Int, 4).get(3) = this.next.next.next.item
+Array(Int, 100).get(n) =
+  if n = 0: item
+  let t = this
+  let i = n
+  while True:
+     if i < 0: None
+     else if i = 0: t.item
+     else:
+       set i = i - 1;
+       set t = t.next
+
+#+END_SRC
+# or
+
+type Array(T, L) =
+  if L = 0: struct { }
+  else if L % 2: struct { item: T; next : Array(T, L - 1) }
+  else:     struct { a: Array(T, L / 2); b: Array(T, L / 2) }
+
+type Array(T, L) =
+
+type Array(T, L <= Int64) = struct {
+  length: L
+  data: __array__(T, L)
+}
+
+Array(Byte, 3) = byte * byte * byte
+Array(Byte, Int64) = func (Int64) k
+type Data(T, length) = struct {
+  data: __array__(T, length)
+}

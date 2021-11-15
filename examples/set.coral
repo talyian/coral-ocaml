@@ -1,0 +1,5 @@
+
+
+type ArraySet(T) = Array(T)
+func ArraySet.add(item):
+  add_unique(this, item)

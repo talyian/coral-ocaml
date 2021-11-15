@@ -1,0 +1,169 @@
+* K-Nucleotide
+
+The main purpose of this is to benchmark the dictionary implementation.
+
+In this implementation we deliberately avoid the specific optimizations of
+ - re-encoding the dna string using less than 1 byte per base pair
+ - incrementally updating the hash instead of calculating it for each substring
+
+#+BEGIN_SRC coral
+let dna = (stdin.bytes
+   .lines
+   .skip_until(func(x) { x.starts_with ">THREE" })
+   .skip(1)
+   .take_until(func(x) { x.starts_with ">" })
+   .join())
+
+# create a dictionary
+func build_table(n):
+  let table = dict(default_value=0)
+  for (start) in range(0, dna.length - n + 1):
+    set table[dna.slice(start, start + n)] += 1
+  return table
+
+func table(n):
+  for (pair) in (build_table n).sort_by(flip >> negate):
+     print $"{pair.key} {pair.value%0.3f}"
+
+func count(s):
+  print $"{build_table(s.length())[s]}\t{s}"
+
+table 1
+table 2
+count "GGT"
+count "GGTA"
+count "GGTATT"
+count "GGTATTTTAATT"
+count "GGTATTTTAATTTATAGT"
+#+END_SRC
+
+*** Desugaring
+
+It would be nice to have some kind of dependent-type JIT in the future
+where we have
+#+BEGIN_SRC coral
+
+# Linear probing dictionary data
+type DictionaryData(Key, Value, capacity) = struct {
+  keys : Array[Key, capacity]
+  values : Array[Value, capacity]
+  filled : Array[Bool, capacity]
+}
+
+@io.pure
+@exception.pure
+@mutable.pure
+func DictionaryData.find (k:Key):
+   let hash = get_hash k
+   let index = hash
+   while true:
+      if !filled[index]:
+        return None
+      if keys[index] = k:
+        return Some values[index]
+      set index = (index + 1) % capacity
+
+@io.pure
+@exception.pure
+func DictionaryData.delete (k:Key):
+   let hash = get_hash k
+   let index = hash
+   while true:
+      if !filled[index]:
+        return
+      if keys[index] = k:
+        set filled[index] = false
+        return
+      set index = (index + 1) % capacity
+
+type Dictionary[Key, Value] = struct {
+   filled : Int32 ,
+   data : DictionaryData[Key, Value, _]
+}
+func Dictionary():
+   { filled = 0, data = DictionaryData(Key, Value, 10) }
+
+func Dictionary.resize(new_capacity):
+   set data = DictionaryData[Key, Value, new_capacity]()
+
+type Default_dict[Key, Value] = struct {
+   Int
+   Int32
+}
+
+func print for (s:Bytes):
+  stdout.write(s, 0, Bytes.length s)
+  stdout.write_byte(s, '\n')
+
+func count(s:Bytes):
+  let len = Bytes.length(s)
+  let tab = build_table len
+  let item = Dictionary[String, Int64].item(tab, s, 0)
+  print (CONCAT_BYTES(build_table(s.length()), b"\t", s))
+#+END_SRC
+
+
+
+
+
+#+BEGIN_SRC coral
+
+type FdReader = struct {
+   fd  : FileDescriptor
+   buf : Array(Int8, 1024),
+   pos : Int32, # read cursor
+   end : Int32, # write cursor
+   len : Int32,
+   @constraint len = buf.length
+   @constraint end <= len # do not write off end of array
+   @constraint pos <= end # do not read past written area
+}
+
+func FdReader.read():
+  set pos = 0
+  set end = fread(fd, buf, len)
+
+func FdReader.lines():
+   func Reading_from_buf:
+     @assert pos < end
+     if buf[pos] == '\n':
+        yield slice(buf, line_start, pos - line_start)
+        set pos += 1
+        set line_start = pos
+     else:
+        set pos += 1
+     if pos < end: Reading_from_buf
+     else: Do_io
+
+   func Do_io:
+     @assert pos = end
+     set pos = 0
+     set end = fread(fd, buf, len)
+
+func FdReader.lines():
+   let { buf, pos, end, len } = this
+   let line_start = 0
+   func loop:
+      let pos = 0
+      set end = fread(fd, buf, len)
+      @assert end <= len
+      @assert pos = 0
+      while pos < end:
+         if buf[pos] == '\n':
+            yield slice(buf, line_start, pos - line_start)
+            line_start = pos + 1
+         set pos += 1
+      @assert pos == end
+      if line_start == pos: loop
+      else:
+         @assert line_start < pos
+         buf2 = buf
+
+   loop
+#+END_SRC
+
+
+let dna = (stdin.bytes.lines()
+    .skip_until((x) => x.startswith ">THREE")
+    .skip(1)
+    .take_until((x) => x.startswith ">").map(create_sequence).join())
