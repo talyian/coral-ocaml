@@ -1,30 +1,16 @@
 (library
- (name coral_passes)
- (modules
-  name_resolution
-  attribute_resolution
-  type_visitor
-  init_func
-  builtin_defs)
- (libraries
-  coral_core
-  coral_frontend
-  coral_types)
+ (name coral_main)
+ (inline_tests)
+ (libraries stdio base sexplib)
  (preprocess (pps
               ppx_compare
               ppx_deriving.show
+              ppx_expect
               ppx_sexp_conv ppx_sexp_value
               ppx_let
               )))
-
-(executable
- (name main)
- (modules main)
- (libraries coral_frontend coral_passes core)
- (preprocess
-  (pps ppx_compare ppx_deriving.show ppx_sexp_conv ppx_let ppx_inline_test)))
-
 (env
  (dev
   (flags
    (:standard -warn-error +8-26-27-32-33))))
+
