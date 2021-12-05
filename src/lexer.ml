@@ -1,26 +1,21 @@
 open Base
 
 (* A lexer is a machine that takes in a stream of input tokens and produces a
-       stream of output tokens, using some internal state.
+   stream of output tokens, using some internal state.
 
-       Performance: Because we're recognizing regular grammars, we can
-       implement a lexer that doesn't need runtime allocation.
+   Performance: Because we're recognizing regular grammars, we can implement a
+   lexer that doesn't need runtime allocation.
 
-       Composition: The input and output are both token streams, so we can chain lexers together.
-   This is useful for chaining unicode lexers that turn byte streams into character streams
-   and our custom lexers that operate on characters.
-*)
+   Composition: The input and output are both token streams, so we can chain
+   lexers together.  This is useful for chaining unicode lexers that turn byte
+   streams into character streams and our custom lexers that operate on
+   characters. *)
 
 (** Represents the input to a lexer. element is the token type and collection is
 an abstraction over a fixed length collection of tokens. TODO: shouldn't
 collection be an iterator? *)
 module type Input = sig
-  type element
-
-  val sexp_of_element : element -> Sexp.t
-  val equal : element -> element -> bool
-  val ( <= ) : element -> element -> bool
-
+  type element [@@deriving sexp_of, equal, compare]
   type collection
 
   val length : collection -> int
@@ -80,9 +75,12 @@ module Regex = struct
     let rec derive c (expr : t) : derivative =
       match expr with
       | Empty -> Error ()
-      | Char x when Input.equal x c -> Ok Empty
+      | Char x when Input.equal_element x c -> Ok Empty
       | Char _ -> Error ()
-      | Range (a, b) -> if Input.(a <= c && c <= b) then Ok Empty else Error ()
+      | Range (a, b) ->
+          if Input.(compare_element a c = -1 && compare_element c b = -1) then
+            Ok Empty
+          else Error ()
       | Any -> Ok Empty
       | Star x -> (
         match derive c x with Error () -> Error () | Ok dx -> Ok (Seq (dx, x)) )
@@ -178,19 +176,22 @@ module Interpreter (Grammar : Grammar) = struct
         else recognize grammar index source acc
 end
 
-let%expect_test "test pattern matches" =
-  let open Regex.Make (struct
-    type element = char [@@deriving sexp_of]
-    type collection = string
+module Char_input = struct
+  (* A Lexer input module based on char and string *)
+  type element = char [@@deriving sexp_of, equal, compare]
+  type collection = string
 
-    let equal = Char.equal
-    let ( <= ) = Char.( <= )
-    let length = String.length
-    let get = String.get
-  end) in
+  let length = String.length
+  let get = String.get
+end
+
+let%expect_test "test pattern matches" =
+  let open Regex.Make (Char_input) in
   let rec show level = function
     | Any -> "."
-    | Char (('.' | '*' | '?' | '(' | ')' | '[' | ']' | '+' | '{' | '}') as c) ->
+    | Char
+        (('\\' | '.' | '*' | '?' | '(' | ')' | '[' | ']' | '+' | '{' | '}') as c)
+      ->
         "\\" ^ String.make 1 c
     | Char c -> String.make 1 c
     | Seq (a, b) ->
@@ -220,15 +221,6 @@ let%expect_test "test pattern matches" =
     ("ugli fruit" "[o-z](Plus(Range a z))" ugli) |}]
 
 let%expect_test "arithmetic grammar" =
-  let module Char_input = struct
-    type element = char [@@deriving sexp_of]
-    type collection = string
-
-    let equal = Char.equal
-    let ( <= ) = Char.( <= )
-    let length = String.length
-    let get = String.get
-  end in
   let module Regex = Regex.Make (Char_input) in
   let module Grammar =
     Grammar_Make (Char_input) (Regex)
